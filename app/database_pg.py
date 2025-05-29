@@ -14,7 +14,7 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 class PostgreSQLDatabase:
     def __init__(self):
         self.pool = None
-        self.DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:password@localhost:5432/rocketpc")
+        self.DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres.ymombwsrvuzuaalctmfm:BJpbYaLB1mBKAHgn@aws-0-eu-west-2.pooler.supabase.com:5432/postgres")
 
     async def connect(self):
         """Создание пула соединений с БД"""
