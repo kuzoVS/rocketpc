@@ -265,14 +265,18 @@ class PostgreSQLDatabase:
             await conn.execute('''
                 INSERT INTO repair_requests (
                     request_id, client_id, device_type, brand, model, 
-                    problem_description, priority
+                    problem_description, priority, status, created_at
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
             ''', request_id, client_id, device_data['device_type'],
-                               device_data.get('brand'), device_data.get('model'),
-                               device_data['problem_description'], device_data.get('priority', 'Обычная'))
+                               device_data.get('brand', ''),
+                               device_data.get('model', ''),
+                               device_data['problem_description'],
+                               device_data.get('priority', 'Обычная'),
+                               'Принята')  # Начальный статус
 
             return request_id
+
 
     async def generate_request_id(self) -> str:
         """Генерация уникального ID заявки"""

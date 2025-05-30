@@ -1,9 +1,74 @@
-// Простые функции для тестирования
-console.log('📄 Скрипт requests загружен');
+// Глобальные переменные
+let allRequests = [];
+let filteredRequests = [];
+let currentPage = 1;
+let itemsPerPage = 10;
+let sortField = 'date';
+let sortOrder = 'desc';
+let currentEditRequestId = null;
 
+// Инициализация при загрузке страницы
+document.addEventListener('DOMContentLoaded', async function() {
+    console.log('📄 Инициализация страницы заявок...');
+
+    // Показываем страницу
+    document.getElementById('pageBody').style.display = 'block';
+
+    // Загружаем информацию о пользователе
+    loadUserInfo();
+
+    // Загружаем заявки
+    await loadRequests();
+
+    // Настраиваем обработчики форм
+    setupFormHandlers();
+
+    // Настраиваем обработчики для выхода
+    setupLogoutHandlers();
+});
+
+// Загрузка информации о пользователе
+function loadUserInfo() {
+    try {
+        const user = JSON.parse(localStorage.getItem('user') || '{}');
+        console.log('👤 Загрузка информации о пользователе:', user.username);
+
+        const userName = document.getElementById('userName');
+        const userRole = document.getElementById('userRole');
+        const userAvatar = document.getElementById('userAvatar');
+
+        if (userName && user.full_name) {
+            userName.textContent = user.full_name;
+        }
+
+        if (userRole && user.role) {
+            const roleMap = {
+                'admin': 'Администратор',
+                'director': 'Директор',
+                'manager': 'Менеджер',
+                'master': 'Мастер'
+            };
+            userRole.textContent = roleMap[user.role] || user.role;
+        }
+
+        if (userAvatar && user.full_name) {
+            userAvatar.textContent = user.full_name.charAt(0).toUpperCase();
+        }
+
+        // Показываем пункт "Пользователи" для админов
+        if (user.role === 'admin' || user.role === 'director') {
+            const usersMenuItem = document.getElementById('usersMenuItem');
+            if (usersMenuItem) usersMenuItem.style.display = 'block';
+        }
+
+    } catch (error) {
+        console.error('❌ Ошибка загрузки информации о пользователе:', error);
+    }
+}
+
+// Загрузка заявок с использованием существующего API
 async function loadRequests() {
     console.log('📋 Загружаем заявки...');
-    const container = document.getElementById('requestsContainer');
 
     try {
         const token = localStorage.getItem('access_token');
@@ -18,101 +83,503 @@ async function loadRequests() {
         }
 
         if (response.ok) {
-            const requests = await response.json();
-            console.log(`✅ Загружено ${requests.length} заявок`);
+            allRequests = await response.json();
+            console.log(`✅ Загружено ${allRequests.length} заявок`);
 
-            if (requests.length === 0) {
-                container.innerHTML = '<p style="text-align: center; color: rgba(255,255,255,0.6); padding: 2rem;">📝 Заявки не найдены</p>';
-                return;
-            }
-
-            // Простая таблица
-            container.innerHTML = `
-                <div style="overflow-x: auto;">
-                    <table style="width: 100%; border-collapse: collapse;">
-                        <thead>
-                            <tr style="background: rgba(0, 255, 255, 0.1);">
-                                <th style="padding: 1rem; color: #00ffff; border-bottom: 2px solid rgba(0, 255, 255, 0.3);">ID</th>
-                                <th style="padding: 1rem; color: #00ffff; border-bottom: 2px solid rgba(0, 255, 255, 0.3);">Клиент</th>
-                                <th style="padding: 1rem; color: #00ffff; border-bottom: 2px solid rgba(0, 255, 255, 0.3);">Устройство</th>
-                                <th style="padding: 1rem; color: #00ffff; border-bottom: 2px solid rgba(0, 255, 255, 0.3);">Статус</th>
-                                <th style="padding: 1rem; color: #00ffff; border-bottom: 2px solid rgba(0, 255, 255, 0.3);">Дата</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${requests.map(req => `
-                                <tr style="border-bottom: 1px solid rgba(255, 255, 255, 0.1);">
-                                    <td style="padding: 1rem; color: #00ffff; font-weight: bold;">#${req.request_id}</td>
-                                    <td style="padding: 1rem;">${req.client_name || 'Не указано'}</td>
-                                    <td style="padding: 1rem;">${req.device_type || 'Не указано'}</td>
-                                    <td style="padding: 1rem;">
-                                        <span style="
-                                            background: rgba(0, 255, 255, 0.2);
-                                            color: #00ffff;
-                                            padding: 0.25rem 0.75rem;
-                                            border-radius: 20px;
-                                            font-size: 0.85rem;
-                                        ">${req.status}</span>
-                                    </td>
-                                    <td style="padding: 1rem;">${new Date(req.created_at).toLocaleDateString('ru-RU')}</td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
-                </div>
-            `;
+            // Применяем фильтры
+            filterRequests();
         } else {
             console.log('❌ Ошибка загрузки:', response.status);
-            container.innerHTML = '<p style="text-align: center; color: #ff4444; padding: 2rem;">❌ Ошибка загрузки заявок</p>';
+            showNotification('Ошибка загрузки заявок', 'error');
         }
     } catch (error) {
         console.error('❌ Ошибка:', error);
-        container.innerHTML = '<p style="text-align: center; color: #ff4444; padding: 2rem;">❌ Ошибка подключения</p>';
+        showNotification('Ошибка подключения к серверу', 'error');
     }
 }
 
-async function testCreateRequest() {
-    console.log('🧪 Тест создания заявки...');
-
-    const testData = {
-        client_name: 'Тестовый Клиент',
-        phone: '+7 (999) 123-45-67',
-        email: 'test@example.com',
-        device_type: 'Ноутбук',
-        problem_description: 'Тестовая заявка созданная через веб-интерфейс'
-    };
-
+// Создание новой заявки через существующий API
+async function createRequest(requestData) {
     try {
+        // Используем открытый эндпоинт /api/requests для создания заявки
         const response = await fetch('/api/requests', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(testData)
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(requestData)
         });
 
         if (response.ok) {
             const result = await response.json();
-            alert(`✅ Заявка создана! ID: ${result.id}`);
-            loadRequests(); // Обновляем список
+            showNotification(`Заявка создана! ID: ${result.id}`, 'success');
+            closeModal('newRequestModal');
+            await loadRequests(); // Перезагружаем список
+            return result;
         } else {
             const error = await response.json();
-            alert(`❌ Ошибка: ${error.detail}`);
+            showNotification(error.detail || 'Ошибка создания заявки', 'error');
         }
     } catch (error) {
-        console.error('❌ Ошибка создания:', error);
-        alert('❌ Ошибка подключения');
+        console.error('❌ Ошибка создания заявки:', error);
+        showNotification('Ошибка подключения к серверу', 'error');
     }
 }
 
+// Обновление статуса заявки через API
+async function updateRequestStatus(requestId, newStatus, comment = '') {
+    try {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`/dashboard/api/requests/${requestId}/status`, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                status: newStatus,
+                comment: comment
+            })
+        });
+
+        if (response.ok) {
+            showNotification('Статус обновлен', 'success');
+            closeModal('editRequestModal');
+            await loadRequests();
+        } else {
+            const error = await response.json();
+            showNotification(error.detail || 'Ошибка обновления', 'error');
+        }
+    } catch (error) {
+        console.error('❌ Ошибка обновления:', error);
+        showNotification('Ошибка подключения к серверу', 'error');
+    }
+}
+
+// Архивирование заявки
+async function archiveRequest(requestId) {
+    if (!confirm('Вы уверены, что хотите архивировать эту заявку?')) return;
+
+    try {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch(`/dashboard/api/requests/${requestId}/archive`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+
+        if (response.ok) {
+            showNotification('Заявка архивирована', 'success');
+            await loadRequests();
+        } else {
+            const error = await response.json();
+            showNotification(error.detail || 'Ошибка архивирования', 'error');
+        }
+    } catch (error) {
+        console.error('❌ Ошибка архивирования:', error);
+        showNotification('Ошибка подключения к серверу', 'error');
+    }
+}
+
+// Настройка обработчиков форм
+function setupFormHandlers() {
+    // Форма создания заявки
+    const newRequestForm = document.getElementById('newRequestForm');
+    if (newRequestForm) {
+        newRequestForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const requestData = {
+                client_name: document.getElementById('clientName').value,
+                phone: document.getElementById('clientPhone').value,
+                email: document.getElementById('clientEmail').value || '',
+                device_type: document.getElementById('deviceType').value,
+                problem_description: document.getElementById('problemDescription').value,
+                priority: document.getElementById('priority').value || 'Обычная'
+            };
+
+            // Добавляем дополнительные поля если они заполнены
+            const brand = document.getElementById('deviceBrand').value;
+            const model = document.getElementById('deviceModel').value;
+
+            if (brand) requestData.brand = brand;
+            if (model) requestData.model = model;
+
+            await createRequest(requestData);
+        });
+    }
+
+    // Форма редактирования заявки
+    const editRequestForm = document.getElementById('editRequestForm');
+    if (editRequestForm) {
+        editRequestForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const newStatus = document.getElementById('editStatus').value;
+            const comment = document.getElementById('editComment').value;
+
+            await updateRequestStatus(currentEditRequestId, newStatus, comment);
+        });
+    }
+}
+
+// Фильтрация заявок
+function filterRequests() {
+    const searchValue = document.getElementById('searchInput').value.toLowerCase();
+    const statusFilter = document.getElementById('statusFilter').value;
+    const priorityFilter = document.getElementById('priorityFilter').value;
+    const periodFilter = document.getElementById('periodFilter').value;
+
+    filteredRequests = allRequests.filter(request => {
+        // Поиск по тексту
+        if (searchValue) {
+            const searchMatch =
+                request.request_id.toLowerCase().includes(searchValue) ||
+                request.client_name.toLowerCase().includes(searchValue) ||
+                request.device_type.toLowerCase().includes(searchValue) ||
+                (request.problem_description || '').toLowerCase().includes(searchValue);
+
+            if (!searchMatch) return false;
+        }
+
+        // Фильтр по статусу
+        if (statusFilter && request.status !== statusFilter) return false;
+
+        // Фильтр по приоритету
+        if (priorityFilter && request.priority !== priorityFilter) return false;
+
+        // Фильтр по периоду
+        if (periodFilter) {
+            const requestDate = new Date(request.created_at);
+            const now = new Date();
+
+            switch (periodFilter) {
+                case 'today':
+                    if (requestDate.toDateString() !== now.toDateString()) return false;
+                    break;
+                case 'week':
+                    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                    if (requestDate < weekAgo) return false;
+                    break;
+                case 'month':
+                    const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+                    if (requestDate < monthAgo) return false;
+                    break;
+            }
+        }
+
+        return true;
+    });
+
+    // Сортируем и отображаем
+    sortRequests();
+    currentPage = 1;
+    displayRequests();
+}
+
+// Сортировка заявок
+function sortTable(field) {
+    if (sortField === field) {
+        sortOrder = sortOrder === 'asc' ? 'desc' : 'asc';
+    } else {
+        sortField = field;
+        sortOrder = 'asc';
+    }
+
+    sortRequests();
+    displayRequests();
+}
+
+function sortRequests() {
+    filteredRequests.sort((a, b) => {
+        let valueA, valueB;
+
+        switch (sortField) {
+            case 'id':
+                valueA = a.request_id;
+                valueB = b.request_id;
+                break;
+            case 'client':
+                valueA = a.client_name;
+                valueB = b.client_name;
+                break;
+            case 'device':
+                valueA = a.device_type;
+                valueB = b.device_type;
+                break;
+            case 'status':
+                valueA = a.status;
+                valueB = b.status;
+                break;
+            case 'priority':
+                const priorityOrder = { 'Критическая': 4, 'Высокая': 3, 'Обычная': 2, 'Низкая': 1 };
+                valueA = priorityOrder[a.priority] || 2;
+                valueB = priorityOrder[b.priority] || 2;
+                break;
+            case 'date':
+                valueA = new Date(a.created_at);
+                valueB = new Date(b.created_at);
+                break;
+            default:
+                valueA = a[sortField];
+                valueB = b[sortField];
+        }
+
+        if (valueA < valueB) return sortOrder === 'asc' ? -1 : 1;
+        if (valueA > valueB) return sortOrder === 'asc' ? 1 : -1;
+        return 0;
+    });
+}
+
+// Отображение заявок в таблице
+function displayRequests() {
+    const tbody = document.getElementById('requestsTableBody');
+
+    if (filteredRequests.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; padding: 3rem; color: rgba(255,255,255,0.6);">Заявки не найдены</td></tr>';
+        document.getElementById('pagination').innerHTML = '';
+        return;
+    }
+
+    // Расчет пагинации
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    const pageRequests = filteredRequests.slice(startIndex, endIndex);
+
+    // Генерация HTML таблицы
+    tbody.innerHTML = pageRequests.map(request => {
+        const statusClass = getStatusClass(request.status);
+        const priorityClass = getPriorityClass(request.priority);
+
+        return `
+            <tr>
+                <td style="color: #00ffff; font-weight: bold;">#${request.request_id}</td>
+                <td>${request.client_name}</td>
+                <td>${request.device_type} ${request.brand ? `(${request.brand})` : ''}</td>
+                <td title="${request.problem_description}">${truncateText(request.problem_description, 50)}</td>
+                <td><span class="status-badge ${statusClass}">${request.status}</span></td>
+                <td><span class="priority-badge ${priorityClass}">${request.priority || 'Обычная'}</span></td>
+                <td>${request.master_name || '-'}</td>
+                <td>${formatDate(request.created_at)}</td>
+                <td>
+                    <div class="table-actions">
+                        <button class="btn btn-icon btn-edit" onclick="openEditModal('${request.request_id}')" title="Редактировать">
+                            ✏️
+                        </button>
+                        <button class="btn btn-icon btn-delete" onclick="archiveRequest('${request.request_id}')" title="Архивировать">
+                            📁
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    }).join('');
+
+    // Обновляем пагинацию
+    updatePagination();
+}
+
+// Обновление пагинации
+function updatePagination() {
+    const totalPages = Math.ceil(filteredRequests.length / itemsPerPage);
+    const pagination = document.getElementById('pagination');
+
+    if (totalPages <= 1) {
+        pagination.innerHTML = '';
+        return;
+    }
+
+    let html = '';
+
+    // Кнопка "Назад"
+    html += `<button class="page-btn" onclick="changePage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>
+        ← Назад
+    </button>`;
+
+    // Номера страниц
+    for (let i = 1; i <= totalPages; i++) {
+        if (i === 1 || i === totalPages || (i >= currentPage - 2 && i <= currentPage + 2)) {
+            html += `<button class="page-btn ${i === currentPage ? 'active' : ''}" onclick="changePage(${i})">
+                ${i}
+            </button>`;
+        } else if (i === currentPage - 3 || i === currentPage + 3) {
+            html += '<span style="color: rgba(255,255,255,0.5);">...</span>';
+        }
+    }
+
+    // Кнопка "Вперед"
+    html += `<button class="page-btn" onclick="changePage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>
+        Вперед →
+    </button>`;
+
+    pagination.innerHTML = html;
+}
+
+// Изменение страницы
+function changePage(page) {
+    const totalPages = Math.ceil(filteredRequests.length / itemsPerPage);
+    if (page < 1 || page > totalPages) return;
+
+    currentPage = page;
+    displayRequests();
+}
+
+// Открытие модального окна создания заявки
+function openNewRequestModal() {
+    document.getElementById('newRequestForm').reset();
+    document.getElementById('priority').value = 'Обычная';
+    document.querySelectorAll('.status-option').forEach(btn => {
+        btn.classList.toggle('active', btn.textContent === 'Обычная');
+    });
+    openModal('newRequestModal');
+}
+
+// Открытие модального окна редактирования
+function openEditModal(requestId) {
+    const request = allRequests.find(r => r.request_id === requestId);
+    if (!request) return;
+
+    currentEditRequestId = requestId;
+
+    // Заполняем информацию о заявке
+    document.getElementById('editRequestId').textContent = `#${request.request_id}`;
+    document.getElementById('editCreatedAt').textContent = formatDate(request.created_at);
+    document.getElementById('editClientInfo').textContent = `${request.client_name} (${request.client_phone})`;
+    document.getElementById('editDeviceInfo').textContent = `${request.device_type} ${request.brand || ''} ${request.model || ''}`;
+    document.getElementById('editProblemDescription').value = request.problem_description;
+    document.getElementById('editStatus').value = request.status;
+    document.getElementById('editPriority').value = request.priority || 'Обычная';
+
+    // Сбрасываем комментарий
+    document.getElementById('editComment').value = '';
+
+    openModal('editRequestModal');
+}
+
+// Вспомогательные функции
+function getStatusClass(status) {
+    const statusMap = {
+        'Принята': 'status-new',
+        'Диагностика': 'status-in-progress',
+        'Ожидание запчастей': 'status-pending',
+        'В ремонте': 'status-in-progress',
+        'Тестирование': 'status-in-progress',
+        'Готова к выдаче': 'status-completed',
+        'Выдана': 'status-completed'
+    };
+    return statusMap[status] || 'status-new';
+}
+
+function getPriorityClass(priority) {
+    const priorityMap = {
+        'Низкая': 'priority-low',
+        'Обычная': 'priority-normal',
+        'Высокая': 'priority-high',
+        'Критическая': 'priority-critical'
+    };
+    return priorityMap[priority] || 'priority-normal';
+}
+
+function formatDate(dateString) {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('ru-RU', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+}
+
+function truncateText(text, maxLength) {
+    if (!text) return '';
+    return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
+}
+
+// Управление модальными окнами
+function openModal(modalId) {
+    document.getElementById(modalId).style.display = 'flex';
+}
+
+function closeModal(modalId) {
+    document.getElementById(modalId).style.display = 'none';
+}
+
+// Установка приоритета
+function setPriority(button, priority) {
+    document.querySelectorAll('.status-option').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    button.classList.add('active');
+    document.getElementById('priority').value = priority;
+}
+
+// Показ уведомлений
+function showNotification(message, type = 'success') {
+    const notification = document.createElement('div');
+    notification.className = `notification ${type}`;
+    notification.textContent = message;
+
+    document.body.appendChild(notification);
+
+    setTimeout(() => {
+        notification.remove();
+    }, 3000);
+}
+
+// Экспорт заявок
+function exportRequests() {
+    const csvContent = [
+        ['ID', 'Клиент', 'Телефон', 'Устройство', 'Проблема', 'Статус', 'Приоритет', 'Дата'],
+        ...filteredRequests.map(r => [
+            r.request_id,
+            r.client_name,
+            r.client_phone || '',
+            `${r.device_type} ${r.brand || ''} ${r.model || ''}`,
+            r.problem_description,
+            r.status,
+            r.priority || 'Обычная',
+            formatDate(r.created_at)
+        ])
+    ].map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
+
+    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `заявки_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+}
+
+// Переключение sidebar
+function toggleSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    if (sidebar) sidebar.classList.toggle('active');
+}
+
+// Выход из системы
 function logout() {
-    console.log('🚪 Выход');
+    console.log('🚪 Выход из системы');
     localStorage.removeItem('access_token');
     localStorage.removeItem('user');
     window.location.replace('/auth/login');
 }
 
-// Автозагрузка при открытии страницы
-document.addEventListener('DOMContentLoaded', function() {
-    setTimeout(loadRequests, 500);
-});
+// Настройка обработчиков выхода
+function setupLogoutHandlers() {
+    document.querySelectorAll('a[href="#logout"]').forEach(link => {
+        link.addEventListener('click', function(e) {
+            e.preventDefault();
+            logout();
+        });
+    });
+}
 
-console.log('✅ Простая страница заявок готова');
+// Закрытие модальных окон по клику вне их
+window.onclick = function(event) {
+    if (event.target.classList.contains('modal')) {
+        event.target.style.display = 'none';
+    }
+}
+
+console.log('✅ Скрипт управления заявками загружен');

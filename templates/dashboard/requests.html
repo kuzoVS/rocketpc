@@ -3,31 +3,277 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Заявки - ROCKET PC</title>
+    <title>Управление заявками - ROCKET PC</title>
     <link rel="stylesheet" href="{{ url_for('static', path='/css/dashboard.css') }}">
 
-    <!-- Простая проверка токена -->
+    <!-- Проверка токена -->
     <script>
-        console.log('🔍 Проверка токена...');
         const token = localStorage.getItem('access_token');
         if (!token) {
-            console.log('❌ Токена нет, редирект');
             window.location.replace('/auth/login');
-        } else {
-            console.log('✅ Токен найден');
-            document.addEventListener('DOMContentLoaded', function() {
-                document.body.style.display = 'block';
-                console.log('📄 Страница заявок загружена');
-            });
+            document.documentElement.style.display = 'none';
         }
     </script>
+
+    <style>
+        /* Дополнительные стили для страницы заявок */
+        .filters-section {
+            background: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(0, 255, 255, 0.2);
+            border-radius: 16px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .filters-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            align-items: end;
+        }
+
+        .search-box {
+            position: relative;
+        }
+
+        .search-box input {
+            padding-left: 40px;
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        .table-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .btn-sm {
+            padding: 0.25rem 0.75rem;
+            font-size: 0.85rem;
+        }
+
+        .btn-icon {
+            padding: 0.5rem;
+            width: 36px;
+            height: 36px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+        }
+
+        .btn-edit {
+            background: rgba(255, 193, 7, 0.2);
+            color: #ffc107;
+            border: 1px solid rgba(255, 193, 7, 0.3);
+        }
+
+        .btn-delete {
+            background: rgba(220, 53, 69, 0.2);
+            color: #dc3545;
+            border: 1px solid rgba(220, 53, 69, 0.3);
+        }
+
+        .priority-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid rgba(0, 255, 255, 0.2);
+        }
+
+        .modal-title {
+            font-size: 1.5rem;
+            color: #00ffff;
+        }
+
+        .close {
+            background: none;
+            border: none;
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 1.5rem;
+            cursor: pointer;
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+
+        .close:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: #ff4444;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .info-item {
+            padding: 1rem;
+            background: rgba(0, 255, 255, 0.05);
+            border-radius: 8px;
+            border: 1px solid rgba(0, 255, 255, 0.1);
+        }
+
+        .info-label {
+            font-size: 0.85rem;
+            color: rgba(255, 255, 255, 0.6);
+            margin-bottom: 0.25rem;
+        }
+
+        .info-value {
+            font-size: 1.1rem;
+            color: #00ffff;
+        }
+
+        .modal-footer {
+            display: flex;
+            gap: 1rem;
+            justify-content: flex-end;
+            margin-top: 2rem;
+            padding-top: 2rem;
+            border-top: 1px solid rgba(0, 255, 255, 0.2);
+        }
+
+        /* Статусы для выбора */
+        .status-select {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            margin-top: 0.5rem;
+        }
+
+        .status-option {
+            padding: 0.5rem 1rem;
+            border: 1px solid rgba(0, 255, 255, 0.3);
+            border-radius: 20px;
+            background: transparent;
+            color: rgba(255, 255, 255, 0.8);
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .status-option:hover {
+            background: rgba(0, 255, 255, 0.1);
+            border-color: #00ffff;
+        }
+
+        .status-option.active {
+            background: rgba(0, 255, 255, 0.2);
+            color: #00ffff;
+            border-color: #00ffff;
+        }
+
+        #pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 2rem;
+            padding-top: 2rem;
+            border-top: 1px solid rgba(0, 255, 255, 0.2);
+        }
+
+        .page-btn {
+            padding: 0.5rem 1rem;
+            background: transparent;
+            border: 1px solid rgba(0, 255, 255, 0.3);
+            color: #00ffff;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .page-btn:hover {
+            background: rgba(0, 255, 255, 0.1);
+            border-color: #00ffff;
+        }
+
+        .page-btn.active {
+            background: linear-gradient(45deg, #00ffff, #0099ff);
+            color: #000;
+            border: none;
+        }
+
+        .page-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Уведомления */
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 1rem 1.5rem;
+            background: rgba(0, 255, 0, 0.2);
+            border: 1px solid rgba(0, 255, 0, 0.3);
+            color: #00ff00;
+            border-radius: 12px;
+            z-index: 3000;
+            animation: slideInRight 0.4s ease-out;
+        }
+
+        .notification.error {
+            background: rgba(255, 0, 0, 0.2);
+            border-color: rgba(255, 0, 0, 0.3);
+            color: #ff4444;
+        }
+
+        @keyframes slideInRight {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+    </style>
 </head>
-<body style="display: none;">
+<body style="display: none;" id="pageBody">
     <div class="bg-animation"></div>
+
+    <button class="mobile-menu-toggle" onclick="toggleSidebar()">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+    </button>
 
     <div class="dashboard-layout">
         <!-- Sidebar -->
-        <aside class="sidebar">
+        <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
                 <div class="logo">🚀</div>
                 <h2>ROCKET PC</h2>
@@ -47,6 +293,36 @@
                         </a>
                     </li>
                     <li class="nav-item">
+                        <a href="/dashboard/clients" class="nav-link">
+                            <span class="nav-icon">👥</span>
+                            <span>Клиенты</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/dashboard/inventory" class="nav-link">
+                            <span class="nav-icon">📦</span>
+                            <span>Склад</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/dashboard/statistics" class="nav-link">
+                            <span class="nav-icon">📈</span>
+                            <span>Статистика</span>
+                        </a>
+                    </li>
+                    <li class="nav-item" id="usersMenuItem" style="display: none;">
+                        <a href="/dashboard/users" class="nav-link">
+                            <span class="nav-icon">👤</span>
+                            <span>Пользователи</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/dashboard/settings" class="nav-link">
+                            <span class="nav-icon">⚙️</span>
+                            <span>Настройки</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
                         <a href="#logout" class="nav-link" onclick="logout()">
                             <span class="nav-icon">🚪</span>
                             <span>Выход</span>
@@ -61,31 +337,281 @@
             <header class="header">
                 <div class="header-title">
                     <h1>Управление заявками</h1>
-                    <p class="header-subtitle">Система работает! 🎉</p>
+                    <p class="header-subtitle">Все заявки на ремонт в одном месте</p>
                 </div>
                 <div class="header-actions">
-                    <button class="btn" onclick="testCreateRequest()">
-                        ➕ Тест: Новая заявка
+                    <button class="btn" onclick="openNewRequestModal()">
+                        ➕ Новая заявка
                     </button>
+                    <div class="user-info">
+                        <div class="user-avatar" id="userAvatar">А</div>
+                        <div>
+                            <div class="user-name" id="userName">Загрузка...</div>
+                            <div class="user-role" id="userRole" style="font-size: 0.85rem; color: rgba(255,255,255,0.6);">...</div>
+                        </div>
+                    </div>
                 </div>
             </header>
 
-            <!-- Простая таблица заявок -->
+            <!-- Фильтры -->
+            <div class="filters-section fade-in">
+                <div class="filters-grid">
+                    <div class="form-group">
+                        <label>Поиск</label>
+                        <div class="search-box">
+                            <span class="search-icon">🔍</span>
+                            <input type="text" id="searchInput" placeholder="ID, клиент, устройство..."
+                                   onkeyup="filterRequests()">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Статус</label>
+                        <select id="statusFilter" onchange="filterRequests()">
+                            <option value="">Все статусы</option>
+                            <option value="Принята">Принята</option>
+                            <option value="Диагностика">Диагностика</option>
+                            <option value="Ожидание запчастей">Ожидание запчастей</option>
+                            <option value="В ремонте">В ремонте</option>
+                            <option value="Тестирование">Тестирование</option>
+                            <option value="Готова к выдаче">Готова к выдаче</option>
+                            <option value="Выдана">Выдана</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Приоритет</label>
+                        <select id="priorityFilter" onchange="filterRequests()">
+                            <option value="">Все приоритеты</option>
+                            <option value="Низкая">Низкая</option>
+                            <option value="Обычная">Обычная</option>
+                            <option value="Высокая">Высокая</option>
+                            <option value="Критическая">Критическая</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Период</label>
+                        <select id="periodFilter" onchange="filterRequests()">
+                            <option value="">Все время</option>
+                            <option value="today">Сегодня</option>
+                            <option value="week">Неделя</option>
+                            <option value="month">Месяц</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Таблица заявок -->
             <div class="recent-section fade-in">
                 <div class="section-header">
                     <h3 class="section-title">Список заявок</h3>
-                    <button class="btn btn-outline" onclick="loadRequests()">🔄 Обновить</button>
+                    <div style="display: flex; gap: 1rem;">
+                        <button class="btn btn-outline" onclick="loadRequests()">
+                            🔄 Обновить
+                        </button>
+                        <button class="btn btn-outline" onclick="exportRequests()">
+                            📥 Экспорт
+                        </button>
+                    </div>
                 </div>
 
-                <div id="requestsContainer">
-                    <p style="text-align: center; color: rgba(255,255,255,0.6); padding: 2rem;">
-                        <span class="loading"></span><br>
-                        Нажмите "Обновить" для загрузки заявок
-                    </p>
+                <div class="table-container">
+                    <table id="requestsTable">
+                        <thead>
+                            <tr>
+                                <th onclick="sortTable('id')">ID ↕️</th>
+                                <th onclick="sortTable('client')">Клиент ↕️</th>
+                                <th onclick="sortTable('device')">Устройство ↕️</th>
+                                <th>Проблема</th>
+                                <th onclick="sortTable('status')">Статус ↕️</th>
+                                <th onclick="sortTable('priority')">Приоритет ↕️</th>
+                                <th>Мастер</th>
+                                <th onclick="sortTable('date')">Дата ↕️</th>
+                                <th>Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody id="requestsTableBody">
+                            <tr>
+                                <td colspan="9" style="text-align: center; padding: 3rem;">
+                                    <div class="loading"></div>
+                                    Загрузка данных...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
+
+                <!-- Пагинация -->
+                <div id="pagination"></div>
             </div>
         </main>
     </div>
+
+    <!-- Модальное окно создания заявки -->
+    <div id="newRequestModal" class="modal" style="display: none;">
+        <div class="modal-content" style="max-width: 700px;">
+            <div class="modal-header">
+                <h2 class="modal-title">Новая заявка</h2>
+                <button class="close" onclick="closeModal('newRequestModal')">×</button>
+            </div>
+
+            <form id="newRequestForm">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Имя клиента *</label>
+                        <input type="text" id="clientName" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Телефон *</label>
+                        <input type="tel" id="clientPhone" required>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Email</label>
+                        <input type="email" id="clientEmail">
+                    </div>
+                    <div class="form-group">
+                        <label>Тип устройства *</label>
+                        <select id="deviceType" required>
+                            <option value="">Выберите...</option>
+                            <option value="Настольный ПК">Настольный ПК</option>
+                            <option value="Ноутбук">Ноутбук</option>
+                            <option value="Моноблок">Моноблок</option>
+                            <option value="Сервер">Сервер</option>
+                            <option value="Другое">Другое</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Бренд</label>
+                        <input type="text" id="deviceBrand" placeholder="ASUS, HP, Dell...">
+                    </div>
+                    <div class="form-group">
+                        <label>Модель</label>
+                        <input type="text" id="deviceModel">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Описание проблемы *</label>
+                    <textarea id="problemDescription" rows="4" required></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label>Приоритет</label>
+                    <div class="status-select">
+                        <button type="button" class="status-option" onclick="setPriority(this, 'Низкая')">Низкая</button>
+                        <button type="button" class="status-option active" onclick="setPriority(this, 'Обычная')">Обычная</button>
+                        <button type="button" class="status-option" onclick="setPriority(this, 'Высокая')">Высокая</button>
+                        <button type="button" class="status-option" onclick="setPriority(this, 'Критическая')">Критическая</button>
+                    </div>
+                    <input type="hidden" id="priority" value="Обычная">
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline" onclick="closeModal('newRequestModal')">
+                        Отмена
+                    </button>
+                    <button type="submit" class="btn">
+                        Создать заявку
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Модальное окно редактирования заявки -->
+    <div id="editRequestModal" class="modal" style="display: none;">
+        <div class="modal-content" style="max-width: 800px;">
+            <div class="modal-header">
+                <h2 class="modal-title">Редактирование заявки</h2>
+                <button class="close" onclick="closeModal('editRequestModal')">×</button>
+            </div>
+
+            <div class="info-grid">
+                <div class="info-item">
+                    <div class="info-label">ID заявки</div>
+                    <div class="info-value" id="editRequestId">-</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Дата создания</div>
+                    <div class="info-value" id="editCreatedAt">-</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Клиент</div>
+                    <div class="info-value" id="editClientInfo">-</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Устройство</div>
+                    <div class="info-value" id="editDeviceInfo">-</div>
+                </div>
+            </div>
+
+            <form id="editRequestForm">
+                <div class="form-group">
+                    <label>Описание проблемы</label>
+                    <textarea id="editProblemDescription" rows="4" readonly></textarea>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Статус *</label>
+                        <select id="editStatus" required>
+                            <option value="Принята">Принята</option>
+                            <option value="Диагностика">Диагностика</option>
+                            <option value="Ожидание запчастей">Ожидание запчастей</option>
+                            <option value="В ремонте">В ремонте</option>
+                            <option value="Тестирование">Тестирование</option>
+                            <option value="Готова к выдаче">Готова к выдаче</option>
+                            <option value="Выдана">Выдана</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Приоритет</label>
+                        <select id="editPriority">
+                            <option value="Низкая">Низкая</option>
+                            <option value="Обычная">Обычная</option>
+                            <option value="Высокая">Высокая</option>
+                            <option value="Критическая">Критическая</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Мастер</label>
+                        <select id="editMaster">
+                            <option value="">Не назначен</option>
+                            <option value="1">Алексей</option>
+                            <option value="2">Максим</option>
+                            <option value="3">Дмитрий</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Предполагаемая стоимость</label>
+                        <input type="number" id="editEstimatedCost" placeholder="0">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Комментарий к изменению</label>
+                    <textarea id="editComment" rows="2" placeholder="Причина изменения статуса..."></textarea>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline" onclick="closeModal('editRequestModal')">
+                        Отмена
+                    </button>
+                    <button type="submit" class="btn">
+                        Сохранить изменения
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script src="{{ url_for('static', path='/js/requests.js') }}"></script>
 </body>
 </html>
