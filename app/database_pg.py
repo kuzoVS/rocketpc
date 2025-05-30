@@ -5,21 +5,43 @@ import os
 from datetime import datetime
 import hashlib
 import secrets
-from passlib.context import CryptContext
-
-# Контекст для шифрования паролей
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 class PostgreSQLDatabase:
     def __init__(self):
         self.pool = None
-        self.DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres.ymombwsrvuzuaalctmfm:BJpbYaLB1mBKAHgn@aws-0-eu-west-2.pooler.supabase.com:5432/postgres")
+        self.DATABASE_URL = os.getenv("DATABASE_URL",
+                                      "postgresql://postgres.ymombwsrvuzuaalctmfm:BJpbYaLB1mBKAHgn@aws-0-eu-west-2.pooler.supabase.com:5432/postgres")
+
+    def hash_password(self, password: str) -> str:
+        """Простое хеширование пароля"""
+        salt = secrets.token_hex(16)
+        password_hash = hashlib.pbkdf2_hmac('sha256', password.encode(), salt.encode(), 100000)
+        return password_hash.hex() + ':' + salt
+
+    def verify_password(self, plain_password: str, hashed_password: str) -> bool:
+        """Проверка пароля"""
+        try:
+            if ':' not in hashed_password:
+                # Простое сравнение для обратной совместимости
+                return hashlib.sha256(plain_password.encode()).hexdigest() == hashed_password
+
+            hash_part, salt = hashed_password.rsplit(':', 1)
+            password_hash = hashlib.pbkdf2_hmac('sha256', plain_password.encode(), salt.encode(), 100000)
+            return password_hash.hex() == hash_part
+        except Exception as e:
+            print(f"Ошибка проверки пароля: {e}")
+            return False
 
     async def connect(self):
         """Создание пула соединений с БД"""
-        self.pool = await asyncpg.create_pool(self.DATABASE_URL)
-        await self.create_tables()
+        try:
+            self.pool = await asyncpg.create_pool(self.DATABASE_URL)
+            await self.create_tables()
+            print("✅ Успешно подключились к PostgreSQL")
+        except Exception as e:
+            print(f"❌ Ошибка подключения к БД: {e}")
+            raise
 
     async def disconnect(self):
         """Закрытие пула соединений"""
@@ -36,7 +58,7 @@ class PostgreSQLDatabase:
                     username VARCHAR(50) UNIQUE NOT NULL,
                     email VARCHAR(100) UNIQUE NOT NULL,
                     password_hash VARCHAR(255) NOT NULL,
-                    password_plain VARCHAR(255) NOT NULL, -- Для возможности просмотра
+                    password_plain VARCHAR(255) NOT NULL,
                     full_name VARCHAR(100) NOT NULL,
                     role VARCHAR(20) NOT NULL CHECK (role IN ('director', 'manager', 'master', 'admin')),
                     is_active BOOLEAN DEFAULT TRUE,
@@ -82,7 +104,7 @@ class PostgreSQLDatabase:
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     is_archived BOOLEAN DEFAULT FALSE,
-                    warranty_period INTEGER DEFAULT 30, -- дни гарантии
+                    warranty_period INTEGER DEFAULT 30,
                     notes TEXT
                 )
             ''')
@@ -100,51 +122,10 @@ class PostgreSQLDatabase:
                 )
             ''')
 
-            # Таблица запчастей
-            await conn.execute('''
-                CREATE TABLE IF NOT EXISTS parts (
-                    id SERIAL PRIMARY KEY,
-                    name VARCHAR(100) NOT NULL,
-                    part_number VARCHAR(50),
-                    category VARCHAR(50),
-                    price DECIMAL(10, 2),
-                    stock_quantity INTEGER DEFAULT 0,
-                    supplier VARCHAR(100),
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
-
-            # Таблица использованных запчастей в ремонтах
-            await conn.execute('''
-                CREATE TABLE IF NOT EXISTS request_parts (
-                    id SERIAL PRIMARY KEY,
-                    request_id INTEGER REFERENCES repair_requests(id),
-                    part_id INTEGER REFERENCES parts(id),
-                    quantity INTEGER NOT NULL,
-                    price_per_unit DECIMAL(10, 2),
-                    total_price DECIMAL(10, 2),
-                    added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
-
-            # Таблица комментариев и действий по заявкам
-            await conn.execute('''
-                CREATE TABLE IF NOT EXISTS request_actions (
-                    id SERIAL PRIMARY KEY,
-                    request_id INTEGER REFERENCES repair_requests(id),
-                    user_id INTEGER REFERENCES users(id),
-                    action_type VARCHAR(30) NOT NULL, -- 'comment', 'status_change', 'part_added', etc.
-                    description TEXT NOT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
-
-            # Создание индексов для улучшения производительности
+            # Создание индексов
             await conn.execute('CREATE INDEX IF NOT EXISTS idx_requests_status ON repair_requests(status)')
             await conn.execute('CREATE INDEX IF NOT EXISTS idx_requests_created_at ON repair_requests(created_at)')
             await conn.execute('CREATE INDEX IF NOT EXISTS idx_requests_client_id ON repair_requests(client_id)')
-            await conn.execute(
-                'CREATE INDEX IF NOT EXISTS idx_requests_master_id ON repair_requests(assigned_master_id)')
 
             # Создание администратора по умолчанию
             await self.create_default_admin()
@@ -152,23 +133,25 @@ class PostgreSQLDatabase:
     async def create_default_admin(self):
         """Создание администратора по умолчанию"""
         async with self.pool.acquire() as conn:
-            # Проверяем, есть ли уже пользователи
-            users_count = await conn.fetchval('SELECT COUNT(*) FROM users')
-            if users_count == 0:
-                default_password = "admin123"
-                password_hash = pwd_context.hash(default_password)
+            try:
+                # Проверяем, есть ли уже пользователи
+                users_count = await conn.fetchval('SELECT COUNT(*) FROM users')
+                if users_count == 0:
+                    default_password = "admin123"
+                    password_hash = self.hash_password(default_password)
 
-                await conn.execute('''
-                    INSERT INTO users (username, email, password_hash, password_plain, full_name, role)
-                    VALUES ($1, $2, $3, $4, $5, $6)
-                ''', 'admin', 'admin@rocketpc.ru', password_hash, default_password, 'Администратор', 'admin')
+                    await conn.execute('''
+                        INSERT INTO users (username, email, password_hash, password_plain, full_name, role)
+                        VALUES ($1, $2, $3, $4, $5, $6)
+                    ''', 'admin', 'admin@rocketpc.ru', password_hash, default_password, 'Администратор', 'admin')
 
-                print(f"Создан администратор по умолчанию: admin / {default_password}")
+                    print(f"✅ Создан администратор по умолчанию: admin / {default_password}")
+            except Exception as e:
+                print(f"Ошибка создания админа: {e}")
 
-    # Методы для работы с пользователями
     async def create_user(self, username: str, email: str, password: str, full_name: str, role: str) -> int:
         """Создание нового пользователя"""
-        password_hash = pwd_context.hash(password)
+        password_hash = self.hash_password(password)
 
         async with self.pool.acquire() as conn:
             user_id = await conn.fetchval('''
@@ -182,19 +165,23 @@ class PostgreSQLDatabase:
     async def authenticate_user(self, username: str, password: str) -> Optional[Dict]:
         """Аутентификация пользователя"""
         async with self.pool.acquire() as conn:
-            user = await conn.fetchrow('''
-                SELECT id, username, email, password_hash, full_name, role, is_active
-                FROM users WHERE username = $1 AND is_active = TRUE
-            ''', username)
+            try:
+                user = await conn.fetchrow('''
+                    SELECT id, username, email, password_hash, full_name, role, is_active
+                    FROM users WHERE username = $1 AND is_active = TRUE
+                ''', username)
 
-            if user and pwd_context.verify(password, user['password_hash']):
-                # Обновляем время последнего входа
-                await conn.execute('''
-                    UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = $1
-                ''', user['id'])
+                if user and self.verify_password(password, user['password_hash']):
+                    # Обновляем время последнего входа
+                    await conn.execute('''
+                        UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = $1
+                    ''', user['id'])
 
-                return dict(user)
-            return None
+                    return dict(user)
+                return None
+            except Exception as e:
+                print(f"Ошибка аутентификации: {e}")
+                return None
 
     async def get_user(self, user_id: int) -> Optional[Dict]:
         """Получение пользователя по ID"""
@@ -218,7 +205,7 @@ class PostgreSQLDatabase:
 
     async def update_user_password(self, user_id: int, new_password: str) -> bool:
         """Обновление пароля пользователя"""
-        password_hash = pwd_context.hash(new_password)
+        password_hash = self.hash_password(new_password)
 
         async with self.pool.acquire() as conn:
             result = await conn.execute('''
@@ -388,35 +375,9 @@ class PostgreSQLDatabase:
                 ORDER BY count DESC
             ''')
 
-            # Статистика по месяцам
-            monthly_stats = await conn.fetch('''
-                SELECT 
-                    DATE_TRUNC('month', created_at) as month,
-                    COUNT(*) as count
-                FROM repair_requests
-                WHERE created_at >= CURRENT_DATE - INTERVAL '12 months'
-                GROUP BY month
-                ORDER BY month
-            ''')
-
-            # Топ мастеров по количеству заявок
-            master_stats = await conn.fetch('''
-                SELECT 
-                    u.full_name,
-                    COUNT(rr.id) as completed_requests
-                FROM users u
-                LEFT JOIN repair_requests rr ON u.id = rr.assigned_master_id 
-                    AND rr.status = 'Выдана'
-                WHERE u.role = 'master'
-                GROUP BY u.id, u.full_name
-                ORDER BY completed_requests DESC
-            ''')
-
             return {
                 'total_requests': total_requests,
-                'status_stats': [dict(row) for row in status_stats],
-                'monthly_stats': [dict(row) for row in monthly_stats],
-                'master_stats': [dict(row) for row in master_stats]
+                'status_stats': [dict(row) for row in status_stats]
             }
 
 

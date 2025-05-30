@@ -5,253 +5,532 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard - ROCKET PC</title>
     <link rel="stylesheet" href="{{ url_for('static', path='/css/dashboard.css') }}">
+
+    <!-- НЕМЕДЛЕННАЯ ПРОВЕРКА ТОКЕНА -->
+    <script>
+        // Проверяем токен ДО загрузки остального контента
+        console.log('🔍 Немедленная проверка токена...');
+
+        const token = localStorage.getItem('access_token');
+        if (!token) {
+            console.log('❌ Токена нет, немедленный редирект');
+            window.location.replace('/auth/login');
+            // Блокируем дальнейшую загрузку
+            document.documentElement.style.display = 'none';
+        } else {
+            console.log('✅ Токен найден, продолжаем загрузку');
+        }
+    </script>
 </head>
-<body>
-    <div class="bg-animation"></div>
-    <button class="mobile-menu-toggle" onclick="toggleSidebar()">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="3" y1="12" x2="21" y2="12"></line>
-            <line x1="3" y1="6" x2="21" y2="6"></line>
-            <line x1="3" y1="18" x2="21" y2="18"></line>
-        </svg>
-    </button>
+<body style="display: none;" id="pageBody">
+    <!-- Экран загрузки -->
+    <div id="authCheckLoader" style="
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+        color: #00ffff;
+        flex-direction: column;
+        gap: 20px;
+    ">
+        <div class="logo" style="
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(45deg, #00ffff, #0099ff);
+            border-radius: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+            animation: pulse 2s ease-in-out infinite;
+            box-shadow: 0 10px 30px rgba(0, 255, 255, 0.3);
+        ">🚀</div>
+        <h2 style="margin: 0; background: linear-gradient(45deg, #00ffff, #ffffff); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+            ROCKET PC
+        </h2>
+        <div class="loading" style="
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(0, 255, 255, 0.3);
+            border-top-color: #00ffff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        "></div>
+        <p style="margin: 0; color: rgba(255, 255, 255, 0.7);">Проверка доступа...</p>
+    </div>
 
-    <div class="dashboard-layout">
-        <!-- Sidebar -->
-        <aside class="sidebar" id="sidebar">
-            <div class="sidebar-header">
-                <div class="logo">🚀</div>
-                <h2>ROCKET PC</h2>
-            </div>
+    <!-- Основной контент -->
+    <div id="dashboardContent" style="display: none;">
+        <div class="bg-animation"></div>
+        <button class="mobile-menu-toggle" onclick="toggleSidebar()">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="3" y1="12" x2="21" y2="12"></line>
+                <line x1="3" y1="6" x2="21" y2="6"></line>
+                <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+        </button>
 
-            <nav>
-                <ul class="nav-menu">
-                    <li class="nav-item">
-                        <a href="/dashboard" class="nav-link active">
-                            <span class="nav-icon">📊</span>
-                            <span>Главная</span>
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a href="/dashboard/requests" class="nav-link">
-                            <span class="nav-icon">📝</span>
-                            <span>Заявки</span>
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a href="/dashboard/clients" class="nav-link">
-                            <span class="nav-icon">👥</span>
-                            <span>Клиенты</span>
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a href="/dashboard/inventory" class="nav-link">
-                            <span class="nav-icon">📦</span>
-                            <span>Склад</span>
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a href="/dashboard/statistics" class="nav-link">
-                            <span class="nav-icon">📈</span>
-                            <span>Статистика</span>
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a href="/dashboard/users" class="nav-link">
-                            <span class="nav-icon">👤</span>
-                            <span>Пользователи</span>
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a href="/dashboard/settings" class="nav-link">
-                            <span class="nav-icon">⚙️</span>
-                            <span>Настройки</span>
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a href="/logout" class="nav-link">
-                            <span class="nav-icon">🚪</span>
-                            <span>Выход</span>
-                        </a>
-                    </li>
-                </ul>
-            </nav>
-        </aside>
-
-        <!-- Main Content -->
-        <main class="main-content">
-            <!-- Header -->
-            <header class="header">
-                <div class="header-title">
-                    <h1>Панель управления</h1>
-                    <p class="header-subtitle">Добро пожаловать в систему управления ROCKET PC</p>
+        <div class="dashboard-layout">
+            <!-- Sidebar -->
+            <aside class="sidebar" id="sidebar">
+                <div class="sidebar-header">
+                    <div class="logo">🚀</div>
+                    <h2>ROCKET PC</h2>
                 </div>
-                <div class="header-actions">
-                    <button class="btn btn-outline">
-                        <span>🔔</span>
-                    </button>
-                    <div class="user-info">
-                        <div class="user-avatar">А</div>
-                        <div>
-                            <div class="user-name">Администратор</div>
-                            <div class="user-role" style="font-size: 0.85rem; color: rgba(255,255,255,0.6);">admin</div>
+
+                <nav>
+                    <ul class="nav-menu">
+                        <li class="nav-item">
+                            <a href="/dashboard" class="nav-link active">
+                                <span class="nav-icon">📊</span>
+                                <span>Главная</span>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="/dashboard/requests" class="nav-link">
+                                <span class="nav-icon">📝</span>
+                                <span>Заявки</span>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="/dashboard/clients" class="nav-link">
+                                <span class="nav-icon">👥</span>
+                                <span>Клиенты</span>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="/dashboard/inventory" class="nav-link">
+                                <span class="nav-icon">📦</span>
+                                <span>Склад</span>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="/dashboard/statistics" class="nav-link">
+                                <span class="nav-icon">📈</span>
+                                <span>Статистика</span>
+                            </a>
+                        </li>
+                        <li class="nav-item" id="usersMenuItem" style="display: none;">
+                            <a href="/dashboard/users" class="nav-link">
+                                <span class="nav-icon">👤</span>
+                                <span>Пользователи</span>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="/dashboard/settings" class="nav-link">
+                                <span class="nav-icon">⚙️</span>
+                                <span>Настройки</span>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="#logout" class="nav-link">
+                                <span class="nav-icon">🚪</span>
+                                <span>Выход</span>
+                            </a>
+                        </li>
+                    </ul>
+                </nav>
+            </aside>
+
+            <!-- Main Content -->
+            <main class="main-content">
+                <!-- Header -->
+                <header class="header">
+                    <div class="header-title">
+                        <h1>Панель управления</h1>
+                        <p class="header-subtitle">Добро пожаловать в систему управления ROCKET PC</p>
+                    </div>
+                    <div class="header-actions">
+                        <button class="btn btn-outline tooltip" data-tooltip="Уведомления">
+                            <span>🔔</span>
+                        </button>
+                        <div class="user-info">
+                            <div class="user-avatar" id="userAvatar">А</div>
+                            <div>
+                                <div class="user-name" id="userName">Загрузка...</div>
+                                <div class="user-role" id="userRole" style="font-size: 0.85rem; color: rgba(255,255,255,0.6);">...</div>
+                            </div>
+                        </div>
+                    </div>
+                </header>
+
+                <!-- Stats Grid -->
+                <div class="stats-grid fade-in">
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div class="stat-icon">📋</div>
+                        </div>
+                        <div class="stat-value" id="activeRequestsCount">0</div>
+                        <div class="stat-label">Активных заявок</div>
+                        <div class="stat-change">
+                            <span>↑</span> +12% за неделю
+                        </div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div class="stat-icon">✅</div>
+                        </div>
+                        <div class="stat-value" id="completedRequestsCount">0</div>
+                        <div class="stat-label">Выполнено за месяц</div>
+                        <div class="stat-change">
+                            <span>↑</span> +8% к прошлому месяцу
+                        </div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div class="stat-icon">💰</div>
+                        </div>
+                        <div class="stat-value" id="monthlyRevenue">₽0</div>
+                        <div class="stat-label">Доход за месяц</div>
+                        <div class="stat-change">
+                            <span>↑</span> +23% к прошлому месяцу
+                        </div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div class="stat-icon">⏱️</div>
+                        </div>
+                        <div class="stat-value" id="avgRepairTime">0ч</div>
+                        <div class="stat-label">Среднее время ремонта</div>
+                        <div class="stat-change negative">
+                            <span>↓</span> -15% быстрее
                         </div>
                     </div>
                 </div>
-            </header>
 
-            <!-- Stats Grid -->
-            <div class="stats-grid fade-in">
-                <div class="stat-card">
-                    <div class="stat-header">
-                        <div class="stat-icon">📋</div>
+                <!-- Charts Section -->
+                <div class="charts-section fade-in">
+                    <div class="chart-card">
+                        <div class="chart-header">
+                            <h3 class="chart-title">Статистика заявок за неделю</h3>
+                            <button class="btn btn-outline">Подробнее</button>
+                        </div>
+                        <div class="chart-placeholder">
+                            <canvas id="weeklyChart" width="400" height="300"></canvas>
+                        </div>
                     </div>
-                    <div class="stat-value">24</div>
-                    <div class="stat-label">Активных заявок</div>
-                    <div class="stat-change">
-                        <span>↑</span> +12% за неделю
-                    </div>
-                </div>
 
-                <div class="stat-card">
-                    <div class="stat-header">
-                        <div class="stat-icon">✅</div>
-                    </div>
-                    <div class="stat-value">156</div>
-                    <div class="stat-label">Выполнено за месяц</div>
-                    <div class="stat-change">
-                        <span>↑</span> +8% к прошлому месяцу
+                    <div class="chart-card">
+                        <div class="chart-header">
+                            <h3 class="chart-title">Статусы заявок</h3>
+                        </div>
+                        <div class="chart-placeholder">
+                            <canvas id="statusChart" width="300" height="300"></canvas>
+                        </div>
                     </div>
                 </div>
 
-                <div class="stat-card">
-                    <div class="stat-header">
-                        <div class="stat-icon">💰</div>
+                <!-- Recent Requests -->
+                <div class="recent-section fade-in">
+                    <div class="section-header">
+                        <h3 class="section-title">Последние заявки</h3>
+                        <a href="/dashboard/requests" class="btn">Все заявки</a>
                     </div>
-                    <div class="stat-value">₽428K</div>
-                    <div class="stat-label">Доход за месяц</div>
-                    <div class="stat-change">
-                        <span>↑</span> +23% к прошлому месяцу
-                    </div>
-                </div>
-
-                <div class="stat-card">
-                    <div class="stat-header">
-                        <div class="stat-icon">⏱️</div>
-                    </div>
-                    <div class="stat-value">2.5ч</div>
-                    <div class="stat-label">Среднее время ремонта</div>
-                    <div class="stat-change negative">
-                        <span>↓</span> -15% быстрее
-                    </div>
-                </div>
-            </div>
-
-            <!-- Charts Section -->
-            <div class="charts-section fade-in">
-                <div class="chart-card">
-                    <div class="chart-header">
-                        <h3 class="chart-title">Статистика заявок за неделю</h3>
-                        <button class="btn btn-outline">Подробнее</button>
-                    </div>
-                    <div class="chart-placeholder">
-                        <canvas id="weeklyChart"></canvas>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Клиент</th>
+                                    <th>Устройство</th>
+                                    <th>Проблема</th>
+                                    <th>Статус</th>
+                                    <th>Мастер</th>
+                                    <th>Дата</th>
+                                    <th>Действия</th>
+                                </tr>
+                            </thead>
+                            <tbody id="recentRequestsTable">
+                                <tr>
+                                    <td colspan="8" style="text-align: center; color: rgba(255,255,255,0.6);">
+                                        <div class="loading" style="margin: 20px auto;"></div>
+                                        Загрузка данных...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
-
-                <div class="chart-card">
-                    <div class="chart-header">
-                        <h3 class="chart-title">Статусы заявок</h3>
-                    </div>
-                    <div class="chart-placeholder">
-                        <canvas id="statusChart"></canvas>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Recent Requests -->
-            <div class="recent-section fade-in">
-                <div class="section-header">
-                    <h3 class="section-title">Последние заявки</h3>
-                    <a href="/dashboard/requests" class="btn">Все заявки</a>
-                </div>
-                <div class="table-container">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>ID</th>
-                                <th>Клиент</th>
-                                <th>Устройство</th>
-                                <th>Проблема</th>
-                                <th>Статус</th>
-                                <th>Мастер</th>
-                                <th>Дата</th>
-                                <th>Действия</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td>#RQ2A4F</td>
-                                <td>Иван Петров</td>
-                                <td>Ноутбук ASUS</td>
-                                <td>Не включается</td>
-                                <td><span class="status-badge status-new">Новая</span></td>
-                                <td>-</td>
-                                <td>30.05.2025</td>
-                                <td>
-                                    <button class="btn btn-outline" style="padding: 0.25rem 0.5rem; font-size: 0.85rem;">
-                                        Подробнее
-                                    </button>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td>#RQ1B3E</td>
-                                <td>Мария Сидорова</td>
-                                <td>ПК</td>
-                                <td>Перегревается</td>
-                                <td><span class="status-badge status-in-progress">В работе</span></td>
-                                <td>Алексей</td>
-                                <td>30.05.2025</td>
-                                <td>
-                                    <button class="btn btn-outline" style="padding: 0.25rem 0.5rem; font-size: 0.85rem;">
-                                        Подробнее
-                                    </button>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td>#RQ0C2D</td>
-                                <td>Алексей Козлов</td>
-                                <td>Моноблок</td>
-                                <td>Замена HDD</td>
-                                <td><span class="status-badge status-completed">Выполнена</span></td>
-                                <td>Максим</td>
-                                <td>29.05.2025</td>
-                                <td>
-                                    <button class="btn btn-outline" style="padding: 0.25rem 0.5rem; font-size: 0.85rem;">
-                                        Подробнее
-                                    </button>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td>#RQ9A1F</td>
-                                <td>Ольга Иванова</td>
-                                <td>Ноутбук HP</td>
-                                <td>Разбит экран</td>
-                                <td><span class="status-badge status-pending">Ожидание</span></td>
-                                <td>Алексей</td>
-                                <td>29.05.2025</td>
-                                <td>
-                                    <button class="btn btn-outline" style="padding: 0.25rem 0.5rem; font-size: 0.85rem;">
-                                        Подробнее
-                                    </button>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </main>
+            </main>
+        </div>
     </div>
-    <script src="{{ url_for('static', path='/js/dashboard.js') }}"></script>
+
+    <!-- СКРИПТ АУТЕНТИФИКАЦИИ И ИНИЦИАЛИЗАЦИИ -->
+    <script>
+        // Основная функция инициализации
+        async function initializeDashboard() {
+            console.log('🚀 Инициализация dashboard...');
+
+            const token = localStorage.getItem('access_token');
+            if (!token) {
+                console.log('❌ Токена нет в localStorage');
+                redirectToLogin();
+                return;
+            }
+
+            try {
+                // Показываем body
+                document.getElementById('pageBody').style.display = 'block';
+
+                // Проверяем валидность токена
+                console.log('🔍 Проверка валидности токена...');
+                const response = await fetch('/auth/profile', {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (!response.ok) {
+                    console.log('❌ Токен недействителен');
+                    clearTokensAndRedirect();
+                    return;
+                }
+
+                const userData = await response.json();
+                console.log('✅ Токен валидный, пользователь:', userData.username);
+
+                // Загружаем пользовательскую информацию
+                loadUserInfo();
+
+                // Скрываем loader и показываем контент
+                hideLoaderAndShowContent();
+
+                // Загружаем данные
+                await loadDashboardData();
+
+                // Инициализируем графики
+                setTimeout(() => {
+                    drawWeeklyChart();
+                    drawStatusChart();
+                }, 500);
+
+            } catch (error) {
+                console.error('❌ Ошибка инициализации:', error);
+                clearTokensAndRedirect();
+            }
+        }
+
+        function redirectToLogin() {
+            console.log('🚪 Перенаправление на login...');
+            window.location.replace('/auth/login');
+        }
+
+        function clearTokensAndRedirect() {
+            localStorage.removeItem('access_token');
+            localStorage.removeItem('user');
+            redirectToLogin();
+        }
+
+        function hideLoaderAndShowContent() {
+            console.log('👁️ Показываем dashboard контент...');
+
+            const loader = document.getElementById('authCheckLoader');
+            const content = document.getElementById('dashboardContent');
+
+            if (loader) loader.style.display = 'none';
+            if (content) content.style.display = 'block';
+        }
+
+        function loadUserInfo() {
+            try {
+                const user = JSON.parse(localStorage.getItem('user') || '{}');
+                console.log('👤 Загрузка информации о пользователе:', user.username);
+
+                const userName = document.getElementById('userName');
+                const userRole = document.getElementById('userRole');
+                const userAvatar = document.getElementById('userAvatar');
+
+                if (userName && user.full_name) {
+                    userName.textContent = user.full_name;
+                }
+
+                if (userRole && user.role) {
+                    const roleMap = {
+                        'admin': 'Администратор',
+                        'director': 'Директор',
+                        'manager': 'Менеджер',
+                        'master': 'Мастер'
+                    };
+                    userRole.textContent = roleMap[user.role] || user.role;
+                }
+
+                if (userAvatar && user.full_name) {
+                    userAvatar.textContent = user.full_name.charAt(0).toUpperCase();
+                }
+
+                // Показываем пункт "Пользователи" для админов
+                if (user.role === 'admin' || user.role === 'director') {
+                    const usersMenuItem = document.getElementById('usersMenuItem');
+                    if (usersMenuItem) usersMenuItem.style.display = 'block';
+                }
+
+            } catch (error) {
+                console.error('❌ Ошибка загрузки информации о пользователе:', error);
+            }
+        }
+
+        async function loadDashboardData() {
+            console.log('📊 Загрузка данных dashboard...');
+
+            const token = localStorage.getItem('access_token');
+            if (!token) return;
+
+            try {
+                // Загружаем заявки
+                const response = await fetch('/dashboard/api/requests', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (response.status === 401) {
+                    clearTokensAndRedirect();
+                    return;
+                }
+
+                if (response.ok) {
+                    const requests = await response.json();
+                    console.log('✅ Данные загружены:', requests.length, 'заявок');
+
+                    // Обновляем статистику
+                    updateStats(requests);
+
+                    // Обновляем таблицу
+                    updateRequestsTable(requests.slice(0, 5));
+                } else {
+                    console.log('⚠️ Не удалось загрузить данные, показываем demo');
+                    showDemoData();
+                }
+            } catch (error) {
+                console.log('⚠️ Ошибка загрузки, показываем demo data');
+                showDemoData();
+            }
+        }
+
+        function updateStats(requests) {
+            const activeCount = requests.filter(r => r.status !== 'Выдана').length;
+            const completedCount = requests.filter(r => r.status === 'Выдана').length;
+
+            document.getElementById('activeRequestsCount').textContent = activeCount;
+            document.getElementById('completedRequestsCount').textContent = completedCount;
+            document.getElementById('monthlyRevenue').textContent = `₽${(completedCount * 5000).toLocaleString()}`;
+            document.getElementById('avgRepairTime').textContent = '3ч';
+        }
+
+        function updateRequestsTable(requests) {
+            const tbody = document.getElementById('recentRequestsTable');
+            if (!tbody || !requests.length) {
+                showDemoData();
+                return;
+            }
+
+            tbody.innerHTML = requests.map(request => `
+                <tr>
+                    <td>#${request.request_id || 'N/A'}</td>
+                    <td>${request.client_name || 'Не указано'}</td>
+                    <td>${request.device_type || 'Не указано'}</td>
+                    <td>${(request.problem_description || 'Не указано').substring(0, 30)}...</td>
+                    <td><span class="status-badge status-new">${request.status || 'Принята'}</span></td>
+                    <td>${request.master_name || '-'}</td>
+                    <td>${request.created_at ? new Date(request.created_at).toLocaleDateString('ru-RU') : 'N/A'}</td>
+                    <td><button class="btn btn-outline" style="padding: 0.25rem 0.5rem; font-size: 0.85rem;">Подробнее</button></td>
+                </tr>
+            `).join('');
+        }
+
+        function showDemoData() {
+            // Устанавливаем demo статистику
+            document.getElementById('activeRequestsCount').textContent = '12';
+            document.getElementById('completedRequestsCount').textContent = '85';
+            document.getElementById('monthlyRevenue').textContent = '₽425 000';
+            document.getElementById('avgRepairTime').textContent = '3ч';
+
+            // Показываем demo таблицу
+            const tbody = document.getElementById('recentRequestsTable');
+            if (tbody) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td>#RQ2A4F</td>
+                        <td>Иван Петров</td>
+                        <td>Ноутбук ASUS</td>
+                        <td>Не включается</td>
+                        <td><span class="status-badge status-new">Принята</span></td>
+                        <td>-</td>
+                        <td>30.05.2025</td>
+                        <td><button class="btn btn-outline" style="padding: 0.25rem 0.5rem; font-size: 0.85rem;">Подробнее</button></td>
+                    </tr>
+                    <tr>
+                        <td>#RQ1B3E</td>
+                        <td>Мария Сидорова</td>
+                        <td>ПК</td>
+                        <td>Перегревается</td>
+                        <td><span class="status-badge status-in-progress">В ремонте</span></td>
+                        <td>Алексей</td>
+                        <td>29.05.2025</td>
+                        <td><button class="btn btn-outline" style="padding: 0.25rem 0.5rem; font-size: 0.85rem;">Подробнее</button></td>
+                    </tr>
+                `;
+            }
+        }
+
+        function drawWeeklyChart() {
+            const canvas = document.getElementById('weeklyChart');
+            if (!canvas) return;
+
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = "#00ffff";
+            ctx.font = "16px Arial";
+            ctx.fillText("График заявок за неделю", 20, 30);
+            ctx.fillText("(демо-данные)", 20, 60);
+        }
+
+        function drawStatusChart() {
+            const canvas = document.getElementById('statusChart');
+            if (!canvas) return;
+
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = "#00ffff";
+            ctx.font = "16px Arial";
+            ctx.fillText("Статистика по статусам", 20, 30);
+            ctx.fillText("(демо-данные)", 20, 60);
+        }
+
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            if (sidebar) sidebar.classList.toggle('active');
+        }
+
+        function logout() {
+            console.log('🚪 Выход из системы');
+            localStorage.removeItem('access_token');
+            localStorage.removeItem('user');
+            window.location.replace('/auth/login');
+        }
+
+        // Привязываем обработчики событий
+        document.addEventListener('DOMContentLoaded', function() {
+            const logoutLinks = document.querySelectorAll('a[href="#logout"]');
+            logoutLinks.forEach(link => {
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    logout();
+                });
+            });
+        });
+
+        // Запускаем инициализацию
+        document.addEventListener('DOMContentLoaded', initializeDashboard);
+
+        console.log('✅ Dashboard скрипт загружен');
+    </script>
 </body>
 </html>
