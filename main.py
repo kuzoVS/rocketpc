@@ -7,11 +7,9 @@ from fastapi.templating import Jinja2Templates
 from contextlib import asynccontextmanager
 import uvicorn
 import os
-
 from app.routers import main, requests, auth, dashboard
 from app.config import settings
 from app.database_pg import db
-
 
 # Создание lifecycle manager для подключения к БД
 @asynccontextmanager
@@ -72,9 +70,15 @@ app.include_router(requests.router, prefix="/api")
 app.include_router(auth.router)
 app.include_router(dashboard.router)
 
+templates = Jinja2Templates(directory="templates")
+
 @app.get("/auth/login", response_class=HTMLResponse)
 async def login_page(request: Request):
     return templates.TemplateResponse("auth/login.html", {"request": request})
+
+@app.get("/dashboard", response_class=HTMLResponse)
+async def dashboard_page(request: Request):
+    return templates.TemplateResponse("dashboard/dashboard.html", {"request": request})
 
 # Корневой эндпоинт для проверки API
 @app.get("/api")

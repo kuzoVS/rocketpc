@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - ROCKET PC</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/css/dashboard.css') }}">
+</head>
+<body>
+    <div class="bg-animation"></div>
+    <button class="mobile-menu-toggle" onclick="toggleSidebar()">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+    </button>
+
+    <div class="dashboard-layout">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">🚀</div>
+                <h2>ROCKET PC</h2>
+            </div>
+
+            <nav>
+                <ul class="nav-menu">
+                    <li class="nav-item">
+                        <a href="/dashboard" class="nav-link active">
+                            <span class="nav-icon">📊</span>
+                            <span>Главная</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/dashboard/requests" class="nav-link">
+                            <span class="nav-icon">📝</span>
+                            <span>Заявки</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/dashboard/clients" class="nav-link">
+                            <span class="nav-icon">👥</span>
+                            <span>Клиенты</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/dashboard/inventory" class="nav-link">
+                            <span class="nav-icon">📦</span>
+                            <span>Склад</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/dashboard/statistics" class="nav-link">
+                            <span class="nav-icon">📈</span>
+                            <span>Статистика</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/dashboard/users" class="nav-link">
+                            <span class="nav-icon">👤</span>
+                            <span>Пользователи</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/dashboard/settings" class="nav-link">
+                            <span class="nav-icon">⚙️</span>
+                            <span>Настройки</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="/logout" class="nav-link">
+                            <span class="nav-icon">🚪</span>
+                            <span>Выход</span>
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Header -->
+            <header class="header">
+                <div class="header-title">
+                    <h1>Панель управления</h1>
+                    <p class="header-subtitle">Добро пожаловать в систему управления ROCKET PC</p>
+                </div>
+                <div class="header-actions">
+                    <button class="btn btn-outline">
+                        <span>🔔</span>
+                    </button>
+                    <div class="user-info">
+                        <div class="user-avatar">А</div>
+                        <div>
+                            <div class="user-name">Администратор</div>
+                            <div class="user-role" style="font-size: 0.85rem; color: rgba(255,255,255,0.6);">admin</div>
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Stats Grid -->
+            <div class="stats-grid fade-in">
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <div class="stat-icon">📋</div>
+                    </div>
+                    <div class="stat-value">24</div>
+                    <div class="stat-label">Активных заявок</div>
+                    <div class="stat-change">
+                        <span>↑</span> +12% за неделю
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <div class="stat-icon">✅</div>
+                    </div>
+                    <div class="stat-value">156</div>
+                    <div class="stat-label">Выполнено за месяц</div>
+                    <div class="stat-change">
+                        <span>↑</span> +8% к прошлому месяцу
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <div class="stat-icon">💰</div>
+                    </div>
+                    <div class="stat-value">₽428K</div>
+                    <div class="stat-label">Доход за месяц</div>
+                    <div class="stat-change">
+                        <span>↑</span> +23% к прошлому месяцу
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <div class="stat-icon">⏱️</div>
+                    </div>
+                    <div class="stat-value">2.5ч</div>
+                    <div class="stat-label">Среднее время ремонта</div>
+                    <div class="stat-change negative">
+                        <span>↓</span> -15% быстрее
+                    </div>
+                </div>
+            </div>
+
+            <!-- Charts Section -->
+            <div class="charts-section fade-in">
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h3 class="chart-title">Статистика заявок за неделю</h3>
+                        <button class="btn btn-outline">Подробнее</button>
+                    </div>
+                    <div class="chart-placeholder">
+                        <canvas id="weeklyChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h3 class="chart-title">Статусы заявок</h3>
+                    </div>
+                    <div class="chart-placeholder">
+                        <canvas id="statusChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Requests -->
+            <div class="recent-section fade-in">
+                <div class="section-header">
+                    <h3 class="section-title">Последние заявки</h3>
+                    <a href="/dashboard/requests" class="btn">Все заявки</a>
+                </div>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Клиент</th>
+                                <th>Устройство</th>
+                                <th>Проблема</th>
+                                <th>Статус</th>
+                                <th>Мастер</th>
+                                <th>Дата</th>
+                                <th>Действия</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>#RQ2A4F</td>
+                                <td>Иван Петров</td>
+                                <td>Ноутбук ASUS</td>
+                                <td>Не включается</td>
+                                <td><span class="status-badge status-new">Новая</span></td>
+                                <td>-</td>
+                                <td>30.05.2025</td>
+                                <td>
+                                    <button class="btn btn-outline" style="padding: 0.25rem 0.5rem; font-size: 0.85rem;">
+                                        Подробнее
+                                    </button>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>#RQ1B3E</td>
+                                <td>Мария Сидорова</td>
+                                <td>ПК</td>
+                                <td>Перегревается</td>
+                                <td><span class="status-badge status-in-progress">В работе</span></td>
+                                <td>Алексей</td>
+                                <td>30.05.2025</td>
+                                <td>
+                                    <button class="btn btn-outline" style="padding: 0.25rem 0.5rem; font-size: 0.85rem;">
+                                        Подробнее
+                                    </button>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>#RQ0C2D</td>
+                                <td>Алексей Козлов</td>
+                                <td>Моноблок</td>
+                                <td>Замена HDD</td>
+                                <td><span class="status-badge status-completed">Выполнена</span></td>
+                                <td>Максим</td>
+                                <td>29.05.2025</td>
+                                <td>
+                                    <button class="btn btn-outline" style="padding: 0.25rem 0.5rem; font-size: 0.85rem;">
+                                        Подробнее
+                                    </button>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>#RQ9A1F</td>
+                                <td>Ольга Иванова</td>
+                                <td>Ноутбук HP</td>
+                                <td>Разбит экран</td>
+                                <td><span class="status-badge status-pending">Ожидание</span></td>
+                                <td>Алексей</td>
+                                <td>29.05.2025</td>
+                                <td>
+                                    <button class="btn btn-outline" style="padding: 0.25rem 0.5rem; font-size: 0.85rem;">
+                                        Подробнее
+                                    </button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+    <script src="{{ url_for('static', path='/js/dashboard.js') }}"></script>
+</body>
+</html>
