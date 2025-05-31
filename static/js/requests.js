@@ -101,6 +101,8 @@ async function loadRequests() {
 // Создание новой заявки через существующий API
 async function createRequest(requestData) {
     try {
+        console.log('📝 Отправка данных:', requestData);
+
         // Используем открытый эндпоинт /api/requests для создания заявки
         const response = await fetch('/api/requests', {
             method: 'POST',
@@ -110,15 +112,42 @@ async function createRequest(requestData) {
             body: JSON.stringify(requestData)
         });
 
+        const responseText = await response.text();
+        console.log('📡 Ответ сервера:', response.status, responseText);
+
+        let result;
+        try {
+            result = JSON.parse(responseText);
+        } catch (e) {
+            console.error('❌ Ошибка парсинга JSON:', e);
+            showNotification('Ошибка сервера: неверный формат ответа', 'error');
+            return;
+        }
+
         if (response.ok) {
-            const result = await response.json();
             showNotification(`Заявка создана! ID: ${result.id}`, 'success');
             closeModal('newRequestModal');
             await loadRequests(); // Перезагружаем список
             return result;
         } else {
-            const error = await response.json();
-            showNotification(error.detail || 'Ошибка создания заявки', 'error');
+            // Обрабатываем разные типы ошибок
+            let errorMessage = 'Ошибка создания заявки';
+
+            if (result.detail) {
+                if (typeof result.detail === 'string') {
+                    errorMessage = result.detail;
+                } else if (Array.isArray(result.detail)) {
+                    // Если это массив ошибок валидации от FastAPI
+                    errorMessage = result.detail.map(err => err.msg).join(', ');
+                } else if (typeof result.detail === 'object') {
+                    errorMessage = JSON.stringify(result.detail);
+                }
+            } else if (result.message) {
+                errorMessage = result.message;
+            }
+
+            console.error('❌ Ошибка от сервера:', errorMessage);
+            showNotification(errorMessage, 'error');
         }
     } catch (error) {
         console.error('❌ Ошибка создания заявки:', error);
@@ -190,23 +219,63 @@ function setupFormHandlers() {
         newRequestForm.addEventListener('submit', async (e) => {
             e.preventDefault();
 
+            // Собираем данные из формы
+            const clientName = document.getElementById('clientName').value.trim();
+            const clientPhone = document.getElementById('clientPhone').value.trim();
+            const clientEmail = document.getElementById('clientEmail').value.trim();
+            const deviceType = document.getElementById('deviceType').value;
+            const deviceBrand = document.getElementById('deviceBrand').value.trim();
+            const deviceModel = document.getElementById('deviceModel').value.trim();
+            const problemDescription = document.getElementById('problemDescription').value.trim();
+            const priority = document.getElementById('priority').value || 'Обычная';
+
+            // Базовая валидация
+            if (!clientName || clientName.length < 2) {
+                showNotification('Имя клиента должно содержать минимум 2 символа', 'error');
+                return;
+            }
+
+            if (!clientPhone || clientPhone.length < 10) {
+                showNotification('Телефон должен содержать минимум 10 символов', 'error');
+                return;
+            }
+
+            if (!deviceType) {
+                showNotification('Выберите тип устройства', 'error');
+                return;
+            }
+
+            if (!problemDescription || problemDescription.length < 10) {
+                showNotification('Описание проблемы должно содержать минимум 10 символов', 'error');
+                return;
+            }
+
             const requestData = {
-                client_name: document.getElementById('clientName').value,
-                phone: document.getElementById('clientPhone').value,
-                email: document.getElementById('clientEmail').value || '',
-                device_type: document.getElementById('deviceType').value,
-                problem_description: document.getElementById('problemDescription').value,
-                priority: document.getElementById('priority').value || 'Обычная'
+                client_name: clientName,
+                phone: clientPhone,
+                email: clientEmail || '',
+                device_type: deviceType,
+                problem_description: problemDescription,
+                priority: priority
             };
 
             // Добавляем дополнительные поля если они заполнены
-            const brand = document.getElementById('deviceBrand').value;
-            const model = document.getElementById('deviceModel').value;
+            if (deviceBrand) requestData.brand = deviceBrand;
+            if (deviceModel) requestData.model = deviceModel;
 
-            if (brand) requestData.brand = brand;
-            if (model) requestData.model = model;
+            // Показываем индикатор загрузки
+            const submitButton = e.target.querySelector('button[type="submit"]');
+            const originalText = submitButton.textContent;
+            submitButton.disabled = true;
+            submitButton.textContent = 'Создание...';
 
-            await createRequest(requestData);
+            try {
+                await createRequest(requestData);
+            } finally {
+                // Восстанавливаем кнопку
+                submitButton.disabled = false;
+                submitButton.textContent = originalText;
+            }
         });
     }
 
@@ -219,7 +288,19 @@ function setupFormHandlers() {
             const newStatus = document.getElementById('editStatus').value;
             const comment = document.getElementById('editComment').value;
 
-            await updateRequestStatus(currentEditRequestId, newStatus, comment);
+            // Показываем индикатор загрузки
+            const submitButton = e.target.querySelector('button[type="submit"]');
+            const originalText = submitButton.textContent;
+            submitButton.disabled = true;
+            submitButton.textContent = 'Сохранение...';
+
+            try {
+                await updateRequestStatus(currentEditRequestId, newStatus, comment);
+            } finally {
+                // Восстанавливаем кнопку
+                submitButton.disabled = false;
+                submitButton.textContent = originalText;
+            }
         });
     }
 }
@@ -517,15 +598,33 @@ function setPriority(button, priority) {
 
 // Показ уведомлений
 function showNotification(message, type = 'success') {
+    // Удаляем старые уведомления
+    document.querySelectorAll('.notification').forEach(el => el.remove());
+
     const notification = document.createElement('div');
     notification.className = `notification ${type}`;
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 1rem 1.5rem;
+        background: ${type === 'error' ? 'rgba(255, 0, 0, 0.2)' : 'rgba(0, 255, 0, 0.2)'};
+        border: 1px solid ${type === 'error' ? 'rgba(255, 0, 0, 0.3)' : 'rgba(0, 255, 0, 0.3)'};
+        color: ${type === 'error' ? '#ff4444' : '#00ff00'};
+        border-radius: 12px;
+        z-index: 3000;
+        animation: slideInRight 0.4s ease-out;
+        max-width: 400px;
+        word-wrap: break-word;
+    `;
     notification.textContent = message;
 
     document.body.appendChild(notification);
 
     setTimeout(() => {
-        notification.remove();
-    }, 3000);
+        notification.style.animation = 'slideOutRight 0.4s ease-out';
+        setTimeout(() => notification.remove(), 400);
+    }, 4000);
 }
 
 // Экспорт заявок

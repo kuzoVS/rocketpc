@@ -1,4 +1,3 @@
-# app/database_pg.py
 import asyncpg
 from typing import List, Dict, Optional
 import os
@@ -49,9 +48,9 @@ class PostgreSQLDatabase:
             await self.pool.close()
 
     async def create_tables(self):
-        """Создание таблиц в БД"""
+        """Создание таблиц в БД с улучшенной структурой"""
         async with self.pool.acquire() as conn:
-            # Таблица пользователей (сотрудников)
+            # Таблица пользователей (сотрудников) с расширенными полями
             await conn.execute('''
                 CREATE TABLE IF NOT EXISTS users (
                     id SERIAL PRIMARY KEY,
@@ -61,9 +60,27 @@ class PostgreSQLDatabase:
                     password_plain VARCHAR(255) NOT NULL,
                     full_name VARCHAR(100) NOT NULL,
                     role VARCHAR(20) NOT NULL CHECK (role IN ('director', 'manager', 'master', 'admin')),
+                    phone VARCHAR(20),
+                    specialization VARCHAR(100), -- Специализация для мастеров
+                    hire_date DATE DEFAULT CURRENT_DATE,
                     is_active BOOLEAN DEFAULT TRUE,
+                    is_available BOOLEAN DEFAULT TRUE, -- Доступен ли мастер для новых заявок
+                    max_concurrent_repairs INTEGER DEFAULT 5, -- Макс. количество одновременных ремонтов
+                    current_repairs_count INTEGER DEFAULT 0, -- Текущее количество активных ремонтов
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    last_login TIMESTAMP
+                    last_login TIMESTAMP,
+                    notes TEXT
+                )
+            ''')
+
+            # Таблица навыков мастеров
+            await conn.execute('''
+                CREATE TABLE IF NOT EXISTS master_skills (
+                    id SERIAL PRIMARY KEY,
+                    master_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                    skill_name VARCHAR(100) NOT NULL,
+                    skill_level INTEGER CHECK (skill_level >= 1 AND skill_level <= 5),
+                    UNIQUE(master_id, skill_name)
                 )
             ''')
 
@@ -72,15 +89,17 @@ class PostgreSQLDatabase:
                 CREATE TABLE IF NOT EXISTS clients (
                     id SERIAL PRIMARY KEY,
                     full_name VARCHAR(100) NOT NULL,
-                    phone VARCHAR(20) NOT NULL,
+                    phone VARCHAR(20) NOT NULL UNIQUE,
                     email VARCHAR(100),
                     address TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    total_repairs INTEGER DEFAULT 0,
+                    is_vip BOOLEAN DEFAULT FALSE,
                     notes TEXT
                 )
             ''')
 
-            # Таблица заявок на ремонт
+            # Обновленная таблица заявок на ремонт
             await conn.execute('''
                 CREATE TABLE IF NOT EXISTS repair_requests (
                     id SERIAL PRIMARY KEY,
@@ -101,10 +120,15 @@ class PostgreSQLDatabase:
                     estimated_completion DATE,
                     actual_completion DATE,
                     assigned_master_id INTEGER REFERENCES users(id),
+                    assigned_by_id INTEGER REFERENCES users(id), -- Кто назначил мастера
+                    assigned_at TIMESTAMP, -- Когда был назначен мастер
+                    created_by_id INTEGER REFERENCES users(id), -- Кто создал заявку
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     is_archived BOOLEAN DEFAULT FALSE,
                     warranty_period INTEGER DEFAULT 30,
+                    repair_duration_hours DECIMAL(5, 2), -- Время ремонта в часах
+                    parts_used TEXT, -- Использованные запчасти
                     notes TEXT
                 )
             ''')
@@ -122,13 +146,310 @@ class PostgreSQLDatabase:
                 )
             ''')
 
+            # Таблица назначений мастеров (история)
+            await conn.execute('''
+                CREATE TABLE IF NOT EXISTS assignment_history (
+                    id SERIAL PRIMARY KEY,
+                    request_id INTEGER REFERENCES repair_requests(id),
+                    master_id INTEGER REFERENCES users(id),
+                    assigned_by INTEGER REFERENCES users(id),
+                    assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    unassigned_at TIMESTAMP,
+                    reason VARCHAR(255)
+                )
+            ''')
+
+            # Таблица рабочего времени мастеров
+            await conn.execute('''
+                CREATE TABLE IF NOT EXISTS master_schedule (
+                    id SERIAL PRIMARY KEY,
+                    master_id INTEGER REFERENCES users(id),
+                    day_of_week INTEGER CHECK (day_of_week >= 0 AND day_of_week <= 6),
+                    start_time TIME,
+                    end_time TIME,
+                    is_working_day BOOLEAN DEFAULT TRUE,
+                    UNIQUE(master_id, day_of_week)
+                )
+            ''')
+
             # Создание индексов
             await conn.execute('CREATE INDEX IF NOT EXISTS idx_requests_status ON repair_requests(status)')
             await conn.execute('CREATE INDEX IF NOT EXISTS idx_requests_created_at ON repair_requests(created_at)')
             await conn.execute('CREATE INDEX IF NOT EXISTS idx_requests_client_id ON repair_requests(client_id)')
+            await conn.execute('CREATE INDEX IF NOT EXISTS idx_requests_master_id ON repair_requests(assigned_master_id)')
+            await conn.execute('CREATE INDEX IF NOT EXISTS idx_master_skills_master_id ON master_skills(master_id)')
 
-            # Создание администратора по умолчанию
-            await self.create_default_admin()
+            # Создание администратора и тестовых пользователей
+            await self.create_default_users()
+
+    async def create_default_users(self):
+        """Создание пользователей по умолчанию"""
+        async with self.pool.acquire() as conn:
+            try:
+                # Проверяем, есть ли уже пользователи
+                users_count = await conn.fetchval('SELECT COUNT(*) FROM users')
+                if users_count == 0:
+                    # Администратор
+                    admin_password = "admin123"
+                    admin_hash = self.hash_password(admin_password)
+                    admin_id = await conn.fetchval('''
+                        INSERT INTO users (username, email, password_hash, password_plain, full_name, role, phone)
+                        VALUES ($1, $2, $3, $4, $5, $6, $7)
+                        RETURNING id
+                    ''', 'admin', 'admin@rocketpc.ru', admin_hash, admin_password, 'Администратор', 'admin', '+7 (999) 000-00-01')
+
+                    # Директор
+                    director_password = "director123"
+                    director_hash = self.hash_password(director_password)
+                    await conn.execute('''
+                        INSERT INTO users (username, email, password_hash, password_plain, full_name, role, phone)
+                        VALUES ($1, $2, $3, $4, $5, $6, $7)
+                    ''', 'director', 'director@rocketpc.ru', director_hash, director_password, 'Иван Директоров', 'director', '+7 (999) 000-00-02')
+
+                    # Менеджер
+                    manager_password = "manager123"
+                    manager_hash = self.hash_password(manager_password)
+                    await conn.execute('''
+                        INSERT INTO users (username, email, password_hash, password_plain, full_name, role, phone)
+                        VALUES ($1, $2, $3, $4, $5, $6, $7)
+                    ''', 'manager', 'manager@rocketpc.ru', manager_hash, manager_password, 'Анна Менеджерова', 'manager', '+7 (999) 000-00-03')
+
+                    # Мастера
+                    masters = [
+                        ('master1', 'master123', 'Алексей Мастеров', 'Ноутбуки и ПК', '+7 (999) 000-00-04'),
+                        ('master2', 'master123', 'Максим Ремонтов', 'Материнские платы', '+7 (999) 000-00-05'),
+                        ('master3', 'master123', 'Дмитрий Сервисов', 'Блоки питания', '+7 (999) 000-00-06')
+                    ]
+
+                    for username, password, full_name, spec, phone in masters:
+                        password_hash = self.hash_password(password)
+                        master_id = await conn.fetchval('''
+                            INSERT INTO users (username, email, password_hash, password_plain, full_name, role, phone, specialization)
+                            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                            RETURNING id
+                        ''', username, f'{username}@rocketpc.ru', password_hash, password, full_name, 'master', phone, spec)
+
+                        # Добавляем навыки мастерам
+                        if 'Ноутбуки' in spec:
+                            skills = [('Ремонт ноутбуков', 5), ('Диагностика', 4), ('Замена матриц', 4)]
+                        elif 'Материнские' in spec:
+                            skills = [('Ремонт материнских плат', 5), ('Пайка BGA', 4), ('Диагностика', 3)]
+                        else:
+                            skills = [('Ремонт БП', 5), ('Электроника', 4), ('Диагностика', 3)]
+
+                        for skill_name, level in skills:
+                            await conn.execute('''
+                                INSERT INTO master_skills (master_id, skill_name, skill_level)
+                                VALUES ($1, $2, $3)
+                            ''', master_id, skill_name, level)
+
+                    print("✅ Созданы пользователи по умолчанию:")
+                    print("   admin / admin123")
+                    print("   director / director123")
+                    print("   manager / manager123")
+                    print("   master1 / master123")
+                    print("   master2 / master123")
+                    print("   master3 / master123")
+
+            except Exception as e:
+                print(f"Ошибка создания пользователей: {e}")
+
+    # Методы для работы с мастерами
+    async def get_available_masters(self) -> List[Dict]:
+        """Получение списка доступных мастеров"""
+        async with self.pool.acquire() as conn:
+            masters = await conn.fetch('''
+                SELECT 
+                    u.id, u.username, u.full_name, u.phone, u.specialization,
+                    u.current_repairs_count, u.max_concurrent_repairs,
+                    u.is_available,
+                    COUNT(rr.id) as active_repairs
+                FROM users u
+                LEFT JOIN repair_requests rr ON u.id = rr.assigned_master_id 
+                    AND rr.status NOT IN ('Выдана', 'Готова к выдаче')
+                    AND rr.is_archived = FALSE
+                WHERE u.role = 'master' AND u.is_active = TRUE
+                GROUP BY u.id
+                ORDER BY active_repairs ASC, u.full_name ASC
+            ''')
+
+            return [dict(master) for master in masters]
+
+    async def get_master_skills(self, master_id: int) -> List[Dict]:
+        """Получение навыков мастера"""
+        async with self.pool.acquire() as conn:
+            skills = await conn.fetch('''
+                SELECT skill_name, skill_level
+                FROM master_skills
+                WHERE master_id = $1
+                ORDER BY skill_level DESC
+            ''', master_id)
+
+            return [dict(skill) for skill in skills]
+
+    async def assign_master_to_request(self, request_id: str, master_id: int, assigned_by_id: int) -> bool:
+        """Назначение мастера на заявку"""
+        async with self.pool.acquire() as conn:
+            try:
+                # Проверяем существование заявки
+                request = await conn.fetchrow('''
+                    SELECT id, assigned_master_id 
+                    FROM repair_requests 
+                    WHERE request_id = $1 AND is_archived = FALSE
+                ''', request_id)
+
+                if not request:
+                    return False
+
+                # Если был назначен другой мастер, записываем в историю
+                if request['assigned_master_id']:
+                    await conn.execute('''
+                        UPDATE assignment_history 
+                        SET unassigned_at = CURRENT_TIMESTAMP
+                        WHERE request_id = $1 AND unassigned_at IS NULL
+                    ''', request['id'])
+
+                # Назначаем нового мастера
+                await conn.execute('''
+                    UPDATE repair_requests 
+                    SET assigned_master_id = $1, 
+                        assigned_by_id = $2,
+                        assigned_at = CURRENT_TIMESTAMP,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE request_id = $3
+                ''', master_id, assigned_by_id, request_id)
+
+                # Добавляем запись в историю назначений
+                await conn.execute('''
+                    INSERT INTO assignment_history (request_id, master_id, assigned_by)
+                    VALUES ($1, $2, $3)
+                ''', request['id'], master_id, assigned_by_id)
+
+                # Обновляем счетчик активных ремонтов у мастера
+                await conn.execute('''
+                    UPDATE users 
+                    SET current_repairs_count = (
+                        SELECT COUNT(*) 
+                        FROM repair_requests 
+                        WHERE assigned_master_id = $1 
+                            AND status NOT IN ('Выдана', 'Готова к выдаче')
+                            AND is_archived = FALSE
+                    )
+                    WHERE id = $1
+                ''', master_id)
+
+                return True
+
+            except Exception as e:
+                print(f"Ошибка назначения мастера: {e}")
+                return False
+
+    async def unassign_master_from_request(self, request_id: str, reason: str = None) -> bool:
+        """Снятие мастера с заявки"""
+        async with self.pool.acquire() as conn:
+            try:
+                # Получаем информацию о заявке
+                request = await conn.fetchrow('''
+                    SELECT id, assigned_master_id 
+                    FROM repair_requests 
+                    WHERE request_id = $1 AND is_archived = FALSE
+                ''', request_id)
+
+                if not request or not request['assigned_master_id']:
+                    return False
+
+                old_master_id = request['assigned_master_id']
+
+                # Обновляем заявку
+                await conn.execute('''
+                    UPDATE repair_requests 
+                    SET assigned_master_id = NULL,
+                        assigned_at = NULL,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE request_id = $1
+                ''', request_id)
+
+                # Обновляем историю назначений
+                await conn.execute('''
+                    UPDATE assignment_history 
+                    SET unassigned_at = CURRENT_TIMESTAMP,
+                        reason = $1
+                    WHERE request_id = $2 AND unassigned_at IS NULL
+                ''', reason, request['id'])
+
+                # Обновляем счетчик активных ремонтов у мастера
+                await conn.execute('''
+                    UPDATE users 
+                    SET current_repairs_count = current_repairs_count - 1
+                    WHERE id = $1 AND current_repairs_count > 0
+                ''', old_master_id)
+
+                return True
+
+            except Exception as e:
+                print(f"Ошибка снятия мастера: {e}")
+                return False
+
+    async def get_master_workload(self, master_id: int) -> Dict:
+        """Получение загруженности мастера"""
+        async with self.pool.acquire() as conn:
+            # Активные заявки
+            active_repairs = await conn.fetch('''
+                SELECT 
+                    rr.request_id, rr.status, rr.priority,
+                    c.full_name as client_name,
+                    rr.device_type, rr.created_at
+                FROM repair_requests rr
+                JOIN clients c ON rr.client_id = c.id
+                WHERE rr.assigned_master_id = $1 
+                    AND rr.status NOT IN ('Выдана', 'Готова к выдаче')
+                    AND rr.is_archived = FALSE
+                ORDER BY 
+                    CASE rr.priority
+                        WHEN 'Критическая' THEN 1
+                        WHEN 'Высокая' THEN 2
+                        WHEN 'Обычная' THEN 3
+                        WHEN 'Низкая' THEN 4
+                    END,
+                    rr.created_at
+            ''', master_id)
+
+            # Статистика за последние 30 дней
+            stats = await conn.fetchrow('''
+                SELECT 
+                    COUNT(*) as total_repairs,
+                    COUNT(CASE WHEN rr.status = 'Выдана' THEN 1 END) as completed_repairs,
+                    AVG(EXTRACT(EPOCH FROM (rr.actual_completion - rr.created_at))/3600)::numeric(10,2) as avg_repair_hours
+                FROM repair_requests rr
+                WHERE rr.assigned_master_id = $1
+                    AND rr.created_at >= CURRENT_DATE - INTERVAL '30 days'
+            ''', master_id)
+
+            return {
+                'active_repairs': [dict(r) for r in active_repairs],
+                'stats': dict(stats) if stats else {}
+            }
+
+    async def get_masters_dashboard(self) -> List[Dict]:
+        """Получение dashboard для менеджера с информацией о всех мастерах"""
+        async with self.pool.acquire() as conn:
+            masters = await conn.fetch('''
+                SELECT 
+                    u.id, u.full_name, u.specialization, u.is_available,
+                    COUNT(DISTINCT CASE WHEN rr.status NOT IN ('Выдана', 'Готова к выдаче') 
+                        AND rr.is_archived = FALSE THEN rr.id END) as active_repairs,
+                    COUNT(DISTINCT CASE WHEN rr.status = 'Выдана' 
+                        AND rr.created_at >= CURRENT_DATE - INTERVAL '7 days' THEN rr.id END) as completed_this_week,
+                    STRING_AGG(DISTINCT ms.skill_name || ' (' || ms.skill_level || ')', ', ') as skills
+                FROM users u
+                LEFT JOIN repair_requests rr ON u.id = rr.assigned_master_id
+                LEFT JOIN master_skills ms ON u.id = ms.master_id
+                WHERE u.role = 'master' AND u.is_active = TRUE
+                GROUP BY u.id
+                ORDER BY active_repairs DESC
+            ''')
+
+            return [dict(master) for master in masters]
 
     async def create_default_admin(self):
         """Создание администратора по умолчанию"""
@@ -248,8 +569,8 @@ class PostgreSQLDatabase:
             return client_id
 
     # Методы для работы с заявками
-    async def create_repair_request(self, client_data: Dict, device_data: Dict) -> str:
-        """Создание новой заявки на ремонт"""
+    async def create_repair_request(self, client_data: Dict, device_data: Dict, created_by_id: int = None) -> str:
+        """Создание новой заявки на ремонт с указанием создателя"""
         async with self.pool.acquire() as conn:
             # Создаем или получаем клиента
             client_id = await self.get_or_create_client(
@@ -265,15 +586,23 @@ class PostgreSQLDatabase:
             await conn.execute('''
                 INSERT INTO repair_requests (
                     request_id, client_id, device_type, brand, model, 
-                    problem_description, priority, status, created_at
+                    problem_description, priority, status, created_by_id, created_at
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP)
             ''', request_id, client_id, device_data['device_type'],
                                device_data.get('brand', ''),
                                device_data.get('model', ''),
                                device_data['problem_description'],
                                device_data.get('priority', 'Обычная'),
-                               'Принята')  # Начальный статус
+                               'Принята',
+                               created_by_id)  # ID пользователя, создавшего заявку
+
+            # Обновляем счетчик ремонтов у клиента
+            await conn.execute('''
+                UPDATE clients 
+                SET total_repairs = total_repairs + 1
+                WHERE id = $1
+            ''', client_id)
 
             return request_id
 
@@ -305,18 +634,36 @@ class PostgreSQLDatabase:
             return dict(request) if request else None
 
     async def get_all_repair_requests(self, include_archived: bool = False) -> List[Dict]:
-        """Получение всех заявок"""
+        """Получение всех заявок с расширенной информацией"""
         async with self.pool.acquire() as conn:
             where_clause = "" if include_archived else "WHERE rr.is_archived = FALSE"
 
             requests = await conn.fetch(f'''
-                SELECT rr.*, c.full_name as client_name, c.phone as client_phone,
-                       u.full_name as master_name
+                SELECT 
+                    rr.*, 
+                    c.full_name as client_name, 
+                    c.phone as client_phone,
+                    c.email as client_email,
+                    c.is_vip as client_is_vip,
+                    master.full_name as master_name,
+                    master.phone as master_phone,
+                    master.specialization as master_specialization,
+                    assigned_by.full_name as assigned_by_name,
+                    created_by.full_name as created_by_name
                 FROM repair_requests rr
                 LEFT JOIN clients c ON rr.client_id = c.id
-                LEFT JOIN users u ON rr.assigned_master_id = u.id
+                LEFT JOIN users master ON rr.assigned_master_id = master.id
+                LEFT JOIN users assigned_by ON rr.assigned_by_id = assigned_by.id
+                LEFT JOIN users created_by ON rr.created_by_id = created_by.id
                 {where_clause}
-                ORDER BY rr.created_at DESC
+                ORDER BY 
+                    CASE rr.priority
+                        WHEN 'Критическая' THEN 1
+                        WHEN 'Высокая' THEN 2
+                        WHEN 'Обычная' THEN 3
+                        WHEN 'Низкая' THEN 4
+                    END,
+                    rr.created_at DESC
             ''')
 
             return [dict(request) for request in requests]
