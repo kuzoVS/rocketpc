@@ -104,18 +104,151 @@ async def dashboard_statistics(request: Request):
     """Страница статистики - пока редирект на главную"""
     return RedirectResponse(url="/dashboard", status_code=302)
 
+# Добавьте эти эндпоинты в main.py после существующих dashboard API
 
-# ЗАЩИЩЕННЫЕ API эндпоинты dashboard (строгая проверка токена)
-@app.get("/dashboard/api/requests")
-async def dashboard_api_requests(token_data: Dict = Depends(verify_token)):
-    """API для получения заявок - требует валидный токен"""
+# API для получения доступных мастеров
+@app.get("/dashboard/api/masters/available")
+async def get_available_masters_api(token_data: Dict = Depends(verify_token)):
+    """API для получения списка доступных мастеров"""
     try:
-        print(f"👤 Запрос заявок от пользователя: {token_data.get('username')}")
-        requests_list = await db.get_all_repair_requests()
-        return requests_list
+        masters = await db.get_available_masters()
+
+        # Добавляем навыки для каждого мастера
+        for master in masters:
+            master["skills"] = await db.get_master_skills(master["id"])
+
+        return masters
     except Exception as e:
-        print(f"❌ Ошибка получения заявок: {e}")
+        print(f"❌ Ошибка получения мастеров: {e}")
         return []
+
+
+# API для назначения мастера на заявку
+@app.post("/dashboard/api/requests/{request_id}/assign-master")
+async def assign_master_api(
+        request_id: str,
+        assignment_data: dict,
+        token_data: Dict = Depends(require_role(["admin", "director", "manager"]))
+):
+    """API для назначения мастера на заявку"""
+    try:
+        success = await db.assign_master_to_request(
+            request_id=request_id,
+            master_id=assignment_data.get("master_id"),
+            assigned_by_id=int(token_data["sub"])
+        )
+
+        if not success:
+            raise HTTPException(status_code=404, detail="Заявка не найдена")
+
+        return {"message": "Мастер назначен"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Ошибка назначения мастера: {e}")
+        raise HTTPException(status_code=500, detail="Ошибка назначения мастера")
+
+
+# API для снятия мастера с заявки
+@app.delete("/dashboard/api/requests/{request_id}/unassign-master")
+async def unassign_master_api(
+        request_id: str,
+        token_data: Dict = Depends(require_role(["admin", "director", "manager"]))
+):
+    """API для снятия мастера с заявки"""
+    try:
+        success = await db.unassign_master_from_request(request_id)
+
+        if not success:
+            raise HTTPException(status_code=404, detail="Заявка не найдена или мастер не назначен")
+
+        return {"message": "Мастер снят с заявки"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Ошибка снятия мастера: {e}")
+        raise HTTPException(status_code=500, detail="Ошибка снятия мастера")
+
+
+# API для получения загруженности мастера
+@app.get("/dashboard/api/masters/{master_id}/workload")
+async def get_master_workload_api(
+        master_id: int,
+        token_data: Dict = Depends(verify_token)
+):
+    """API для получения загруженности мастера"""
+    try:
+        workload = await db.get_master_workload(master_id)
+        return workload
+    except Exception as e:
+        print(f"❌ Ошибка получения загруженности: {e}")
+        raise HTTPException(status_code=500, detail="Ошибка получения данных")
+
+
+# API для получения dashboard мастеров
+@app.get("/dashboard/api/masters/dashboard")
+async def get_masters_dashboard_api(
+        token_data: Dict = Depends(require_role(["admin", "director", "manager"]))
+):
+    """API для получения dashboard информации о всех мастерах"""
+    try:
+        dashboard_data = await db.get_masters_dashboard()
+        return dashboard_data
+    except Exception as e:
+        print(f"❌ Ошибка получения dashboard: {e}")
+        return []
+
+
+# Обновленный API для создания заявки с поддержкой назначения мастера
+@app.post("/dashboard/api/requests")
+async def create_request_dashboard_api(
+        request_data: dict,
+        token_data: Dict = Depends(verify_token)
+):
+    """API для создания заявки через dashboard с возможностью назначения мастера"""
+    try:
+        # Подготавливаем данные клиента
+        client_data = {
+            "full_name": request_data.get("client_name"),
+            "phone": request_data.get("phone"),
+            "email": request_data.get("email", "")
+        }
+
+        # Подготавливаем данные устройства
+        device_data = {
+            "device_type": request_data.get("device_type"),
+            "brand": request_data.get("brand", ""),
+            "model": request_data.get("model", ""),
+            "problem_description": request_data.get("problem_description"),
+            "priority": request_data.get("priority", "Обычная")
+        }
+
+        # Создаем заявку
+        request_id = await db.create_repair_request(
+            client_data,
+            device_data,
+            int(token_data["sub"])
+        )
+
+        # Если указан мастер, назначаем его
+        if request_data.get("assigned_master_id"):
+            await db.assign_master_to_request(
+                request_id,
+                request_data["assigned_master_id"],
+                int(token_data["sub"])
+            )
+
+        return {
+            "id": request_id,
+            "message": "Заявка создана",
+            "status": "success"
+        }
+
+    except Exception as e:
+        print(f"❌ Ошибка создания заявки: {e}")
+        raise HTTPException(status_code=500, detail="Ошибка создания заявки")
 
 
 @app.get("/dashboard/api/stats")

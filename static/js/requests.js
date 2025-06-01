@@ -517,7 +517,9 @@ function openNewRequestModal() {
 }
 
 // Открытие модального окна редактирования
-function openEditModal(requestId) {
+
+// Открытие модального окна редактирования
+async function openEditModal(requestId) {
     const request = allRequests.find(r => r.request_id === requestId);
     if (!request) return;
 
@@ -532,12 +534,59 @@ function openEditModal(requestId) {
     document.getElementById('editStatus').value = request.status;
     document.getElementById('editPriority').value = request.priority || 'Обычная';
 
+    // Загружаем список мастеров
+    await loadMasters();
+
+    // Устанавливаем текущего мастера
+    const masterSelect = document.getElementById('editMaster');
+    if (masterSelect && request.assigned_master_id) {
+        masterSelect.value = request.assigned_master_id;
+    }
+
     // Сбрасываем комментарий
     document.getElementById('editComment').value = '';
 
     openModal('editRequestModal');
 }
 
+async function loadMasters() {
+    try {
+        const token = localStorage.getItem('access_token');
+        const response = await fetch('/dashboard/api/masters/available', {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (response.ok) {
+            const masters = await response.json();
+            const masterSelect = document.getElementById('editMaster');
+
+            if (masterSelect) {
+                masterSelect.innerHTML = '<option value="">Не назначен</option>';
+
+                masters.forEach(master => {
+                    const option = document.createElement('option');
+                    option.value = master.id;
+                    option.textContent = `${master.full_name} (Активных: ${master.active_repairs}/${master.max_concurrent_repairs})`;
+
+                    // Добавляем специализацию если есть
+                    if (master.specialization) {
+                        option.textContent += ` - ${master.specialization}`;
+                    }
+
+                    // Отключаем если мастер перегружен
+                    if (!master.is_available || master.active_repairs >= master.max_concurrent_repairs) {
+                        option.disabled = true;
+                        option.textContent += ' (Недоступен)';
+                    }
+
+                    masterSelect.appendChild(option);
+                });
+            }
+        }
+    } catch (error) {
+        console.error('❌ Ошибка загрузки мастеров:', error);
+    }
+}
 // Вспомогательные функции
 function getStatusClass(status) {
     const statusMap = {
