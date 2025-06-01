@@ -2,7 +2,8 @@ from fastapi import APIRouter, HTTPException, Depends
 from typing import List, Dict, Optional
 from pydantic import BaseModel, Field
 from datetime import datetime
-
+from decimal import Decimal
+from datetime import date
 from app.models import RepairRequest, StatusResponse, StatusUpdate
 from app.database_pg import db
 from app.config import settings
@@ -320,3 +321,186 @@ async def get_requests_stats(token_data: Dict = Depends(verify_token)):
     except Exception as e:
         print(f"❌ Ошибка получения статистики: {e}")
         raise HTTPException(status_code=500, detail="Ошибка получения статистики")
+
+
+class UpdateRequestFullModel(BaseModel):
+    # Основная информация об устройстве
+    device_type: Optional[str] = Field(None, min_length=2, max_length=50)
+    brand: Optional[str] = Field(None, max_length=50)
+    model: Optional[str] = Field(None, max_length=100)
+    serial_number: Optional[str] = Field(None, max_length=100)
+
+    # Описание проблемы
+    problem_description: Optional[str] = Field(None, min_length=10, max_length=1000)
+
+    # Статус и приоритет
+    status: Optional[str] = None
+    priority: Optional[str] = None
+
+    # Финансовая информация
+    estimated_cost: Optional[float] = Field(None, ge=0)
+    final_cost: Optional[float] = Field(None, ge=0)
+
+    # Временные рамки
+    estimated_completion: Optional[date] = None
+    repair_duration_hours: Optional[float] = Field(None, ge=0)
+
+    # Дополнительная информация
+    warranty_period: Optional[int] = Field(None, ge=0, le=365)
+    parts_used: Optional[str] = None
+    notes: Optional[str] = None
+
+    # Комментарий к изменению
+    comment: Optional[str] = None
+
+
+# Модель для обновления информации о клиенте
+class UpdateClientModel(BaseModel):
+    full_name: Optional[str] = Field(None, min_length=2, max_length=100)
+    phone: Optional[str] = Field(None, min_length=10, max_length=20)
+    email: Optional[str] = Field(None, max_length=100)
+    address: Optional[str] = None
+
+
+@router.get("/{request_id}/full")
+async def get_request_full(
+        request_id: str,
+        token_data: Dict = Depends(verify_token)
+):
+    """
+    Получение полной информации о заявке для редактирования
+    """
+    try:
+        request_data = await db.get_repair_request_full(request_id)
+
+        if not request_data:
+            raise HTTPException(status_code=404, detail="Заявка не найдена")
+
+        # Получаем историю изменений
+        status_history = await db.get_status_history(request_id)
+        request_data['status_history'] = status_history
+
+        return request_data
+
+    except Exception as e:
+        print(f"❌ Ошибка получения заявки: {e}")
+        raise HTTPException(status_code=500, detail="Ошибка сервера")
+
+
+@router.put("/{request_id}/full")
+async def update_request_full(
+        request_id: str,
+        update_data: UpdateRequestFullModel,
+        token_data: Dict = Depends(verify_token)
+):
+    """
+    Полное обновление заявки на ремонт
+    """
+    try:
+        # Проверяем статус если он указан
+        if update_data.status:
+            valid_statuses = [
+                'Принята', 'Диагностика', 'Ожидание запчастей',
+                'В ремонте', 'Тестирование', 'Готова к выдаче', 'Выдана'
+            ]
+            if update_data.status not in valid_statuses:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Недопустимый статус. Доступные: {', '.join(valid_statuses)}"
+                )
+
+        # Проверяем приоритет если он указан
+        if update_data.priority:
+            valid_priorities = ['Низкая', 'Обычная', 'Высокая', 'Критическая']
+            if update_data.priority not in valid_priorities:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Недопустимый приоритет. Доступные: {', '.join(valid_priorities)}"
+                )
+
+        # Подготавливаем данные для обновления
+        update_dict = {}
+        for field, value in update_data.dict(exclude_unset=True).items():
+            if value is not None and field != 'comment':
+                update_dict[field] = value
+
+        # Добавляем комментарий если есть
+        if update_data.comment:
+            update_dict['comment'] = update_data.comment
+
+        # Обновляем заявку
+        success = await db.update_repair_request_full(
+            request_id=request_id,
+            update_data=update_dict,
+            user_id=int(token_data["sub"])
+        )
+
+        if not success:
+            raise HTTPException(status_code=404, detail="Заявка не найдена")
+
+        return {"message": "Заявка успешно обновлена", "updated_fields": list(update_dict.keys())}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Ошибка обновления заявки: {e}")
+        raise HTTPException(status_code=500, detail="Ошибка обновления заявки")
+
+
+@router.put("/{request_id}/client")
+async def update_request_client(
+        request_id: str,
+        client_data: UpdateClientModel,
+        token_data: Dict = Depends(verify_token)
+):
+    """
+    Обновление информации о клиенте заявки
+    """
+    try:
+        # Получаем заявку чтобы найти клиента
+        request_info = await db.get_repair_request(request_id)
+        if not request_info:
+            raise HTTPException(status_code=404, detail="Заявка не найдена")
+
+        # Подготавливаем данные клиента для обновления
+        client_update = {}
+        for field, value in client_data.dict(exclude_unset=True).items():
+            if value is not None:
+                client_update[field] = value
+
+        if not client_update:
+            return {"message": "Нет данных для обновления"}
+
+        # Обновляем информацию о клиенте
+        # Нужно получить client_id из заявки
+        success = await db.update_client_info(
+            client_id=request_info['client_id'],
+            client_data=client_update
+        )
+
+        if not success:
+            raise HTTPException(status_code=400, detail="Ошибка обновления клиента")
+
+        return {"message": "Информация о клиенте обновлена"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Ошибка обновления клиента: {e}")
+        raise HTTPException(status_code=500, detail="Ошибка сервера")
+
+
+@router.get("/{request_id}/history")
+async def get_request_history(
+        request_id: str,
+        token_data: Dict = Depends(verify_token)
+):
+    """
+    Получение истории изменений заявки
+    """
+    try:
+        history = await db.get_status_history(request_id)
+        return history
+    except Exception as e:
+        print(f"❌ Ошибка получения истории: {e}")
+        raise HTTPException(status_code=500, detail="Ошибка сервера")

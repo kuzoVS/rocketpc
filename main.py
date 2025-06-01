@@ -361,6 +361,146 @@ async def internal_error_handler(request: Request, exc: Exception):
     html_content = """..."""  # unchanged for brevity
     return HTMLResponse(content=html_content, status_code=500)
 
+
+@app.get("/dashboard/api/requests/{request_id}/full")
+async def get_request_full_api(request_id: str, token_data: Dict = Depends(verify_token_from_cookie)):
+    """API для получения полной информации о заявке"""
+    try:
+        request_data = await db.get_repair_request_full(request_id)
+
+        if not request_data:
+            raise HTTPException(status_code=404, detail="Заявка не найдена")
+
+        # Получаем историю изменений
+        status_history = await db.get_status_history(request_id)
+        request_data['status_history'] = status_history
+
+        return request_data
+
+    except Exception as e:
+        print(f"❌ Ошибка получения заявки: {e}")
+        raise HTTPException(status_code=500, detail="Ошибка сервера")
+
+
+@app.put("/dashboard/api/requests/{request_id}/full")
+async def update_request_full_api(request_id: str, update_data: dict,
+                                  token_data: Dict = Depends(verify_token_from_cookie)):
+    """API для полного обновления заявки"""
+    try:
+        print(f"🔄 Полное обновление заявки {request_id} пользователем {token_data.get('username')}")
+        print(f"📝 Данные для обновления: {update_data}")
+
+        # Проверяем статус если он указан
+        if 'status' in update_data and update_data['status']:
+            valid_statuses = [
+                'Принята', 'Диагностика', 'Ожидание запчастей',
+                'В ремонте', 'Тестирование', 'Готова к выдаче', 'Выдана'
+            ]
+            if update_data['status'] not in valid_statuses:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Недопустимый статус. Доступные: {', '.join(valid_statuses)}"
+                )
+
+        # Проверяем приоритет если он указан
+        if 'priority' in update_data and update_data['priority']:
+            valid_priorities = ['Низкая', 'Обычная', 'Высокая', 'Критическая']
+            if update_data['priority'] not in valid_priorities:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Недопустимый приоритет. Доступные: {', '.join(valid_priorities)}"
+                )
+
+        # Очищаем пустые значения
+        clean_data = {}
+        for key, value in update_data.items():
+            if value is not None and value != '':
+                # Преобразуем строковые числа в числа
+                if key in ['estimated_cost', 'final_cost', 'repair_duration_hours'] and isinstance(value, str):
+                    try:
+                        clean_data[key] = float(value) if value else None
+                    except ValueError:
+                        continue
+                elif key == 'warranty_period' and isinstance(value, str):
+                    try:
+                        clean_data[key] = int(value) if value else None
+                    except ValueError:
+                        continue
+                else:
+                    clean_data[key] = value
+
+        # Обновляем заявку
+        success = await db.update_repair_request_full(
+            request_id=request_id,
+            update_data=clean_data,
+            user_id=int(token_data["sub"])
+        )
+
+        if not success:
+            raise HTTPException(status_code=404, detail="Заявка не найдена")
+
+        return {
+            "message": "Заявка успешно обновлена",
+            "updated_fields": list(clean_data.keys())
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Ошибка обновления заявки: {e}")
+        raise HTTPException(status_code=500, detail="Ошибка обновления заявки")
+
+
+@app.put("/dashboard/api/requests/{request_id}/client")
+async def update_request_client_api(request_id: str, client_data: dict,
+                                    token_data: Dict = Depends(verify_token_from_cookie)):
+    """API для обновления информации о клиенте"""
+    try:
+        print(f"👤 Обновление клиента для заявки {request_id}")
+        print(f"📝 Данные клиента: {client_data}")
+
+        # Получаем заявку чтобы найти клиента
+        request_info = await db.get_repair_request(request_id)
+        if not request_info:
+            raise HTTPException(status_code=404, detail="Заявка не найдена")
+
+        # Подготавливаем данные клиента для обновления
+        client_update = {}
+        for field, value in client_data.items():
+            if value is not None and value != '':
+                client_update[field] = value
+
+        if not client_update:
+            return {"message": "Нет данных для обновления"}
+
+        # Обновляем информацию о клиенте
+        success = await db.update_client_info(
+            client_id=request_info['client_id'],
+            client_data=client_update
+        )
+
+        if not success:
+            raise HTTPException(status_code=400, detail="Ошибка обновления клиента")
+
+        return {"message": "Информация о клиенте обновлена"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Ошибка обновления клиента: {e}")
+        raise HTTPException(status_code=500, detail="Ошибка сервера")
+
+
+@app.get("/dashboard/api/requests/{request_id}/history")
+async def get_request_history_api(request_id: str, token_data: Dict = Depends(verify_token_from_cookie)):
+    """API для получения истории изменений заявки"""
+    try:
+        history = await db.get_status_history(request_id)
+        return history
+    except Exception as e:
+        print(f"❌ Ошибка получения истории: {e}")
+        raise HTTPException(status_code=500, detail="Ошибка сервера")
+
 if __name__ == "__main__":
     uvicorn.run(
         "main:app",

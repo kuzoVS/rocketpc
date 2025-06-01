@@ -1,127 +1,255 @@
-// dashboard.js — обновленная версия с графиками
+// dashboard.js — обновленная версия с улучшенным выводом статистики
 
 let weeklyChart = null;
 let statusChart = null;
 let deviceChart = null;
 
 window.addEventListener("DOMContentLoaded", () => {
+  console.log('🚀 Инициализация dashboard...');
   loadDashboardStats();
   loadDashboardRequests();
   loadUserInfo();
   loadCharts();
+  loadTopMasters();
+  loadDeviceStats();
 });
 
 // 📊 Загрузка детальной статистики
 async function loadDashboardStats() {
   try {
+    console.log('📊 Загружаем детальную статистику...');
     const res = await fetch("/dashboard/api/stats/detailed", {
       credentials: "include"
     });
 
     if (res.status === 401) {
+      console.log('❌ 401 - перенаправляем на login');
       window.location.href = "/auth/login";
       return;
     }
 
-    if (!res.ok) throw new Error("Ошибка загрузки статистики");
+    if (!res.ok) throw new Error(`Ошибка загрузки статистики: ${res.status}`);
 
     const stats = await res.json();
+    console.log('✅ Статистика загружена:', stats);
 
-    // Обновляем основные показатели
-    updateStatCard("activeRequestsCount", stats.active_requests || 0, "↑", "+12% за неделю");
-    updateStatCard("completedRequestsCount", stats.completed_this_month || 0, "↑", `+${stats.growth_percentage || 0}% к прошлому месяцу`);
-    updateStatCard("monthlyRevenue", `${(stats.monthly_revenue || 0).toLocaleString('ru-RU')}₽`, "↑", "+23% к прошлому месяцу");
+    // Обновляем основные показатели с проверкой существования элементов
+    updateStatCard("totalRequestsCount", stats.total_requests || 0, "📊", "За все время");
+    updateStatCard("activeRequestsCount", stats.active_requests || 0, "🔥", "В работе сейчас");
+    updateStatCard("completedRequestsCount", stats.completed_this_month || 0, "↑",
+      `${stats.growth_percentage > 0 ? '+' : ''}${stats.growth_percentage || 0}% к прошлому месяцу`);
+    updateStatCard("monthlyRevenue", `${(stats.monthly_revenue || 0).toLocaleString('ru-RU')}₽`, "💵", "Оценочный доход");
+    updateStatCard("avgRepairTime", `${stats.avg_repair_time || 0}`, "📈", "дней");
+    updateStatCard("avgCost", `${(stats.avg_cost || 0).toLocaleString('ru-RU')}₽`, "📊", "За ремонт");
 
-    // Добавляем дополнительные карточки если их нет
-    addAdditionalStatCards(stats);
+    console.log('✅ Статистические карточки обновлены');
 
   } catch (err) {
-    console.error("Ошибка загрузки статистики:", err);
+    console.error("❌ Ошибка загрузки статистики:", err);
+    // Устанавливаем значения по умолчанию при ошибке
+    updateStatCard("totalRequestsCount", 0, "📊", "Ошибка загрузки");
+    updateStatCard("activeRequestsCount", 0, "🔥", "Ошибка загрузки");
+    updateStatCard("completedRequestsCount", 0, "↑", "Ошибка загрузки");
+    updateStatCard("monthlyRevenue", "₽0", "💵", "Ошибка загрузки");
+    updateStatCard("avgRepairTime", "0", "📈", "Ошибка загрузки");
+    updateStatCard("avgCost", "₽0", "📊", "Ошибка загрузки");
   }
 }
 
-function updateStatCard(elementId, value, trend, change) {
+function updateStatCard(elementId, value, icon, change) {
   const element = document.getElementById(elementId);
   if (element) {
     element.textContent = value;
+    console.log(`✅ Обновлена карточка ${elementId}: ${value}`);
 
     // Обновляем изменение
     const changeElement = element.closest('.stat-card').querySelector('.stat-change');
     if (changeElement) {
-      changeElement.innerHTML = `<span>${trend}</span> ${change}`;
+      changeElement.innerHTML = `<span>${icon}</span> ${change}`;
     }
+  } else {
+    console.warn(`⚠️ Элемент ${elementId} не найден`);
   }
 }
 
-function addAdditionalStatCards(stats) {
-  const statsGrid = document.querySelector('.stats-grid');
-  if (!statsGrid) return;
+// 🏆 Загрузка топ мастеров
+async function loadTopMasters() {
+  try {
+    console.log('🏆 Загружаем топ мастеров...');
+    const res = await fetch("/dashboard/api/stats/detailed", {
+      credentials: "include"
+    });
 
-  // Проверяем, есть ли уже дополнительные карточки
-  if (statsGrid.children.length > 3) return;
+    if (!res.ok) throw new Error("Ошибка загрузки данных мастеров");
 
-  // Средняя стоимость
-  const avgCostCard = createStatCard(
-    "💳",
-    `${(stats.avg_cost || 0).toLocaleString('ru-RU')}₽`,
-    "Средняя стоимость",
-    "📈 Стабильно"
-  );
+    const stats = await res.json();
+    const topMasters = stats.top_masters || [];
 
-  statsGrid.appendChild(avgCostCard);
+    console.log('✅ Топ мастера загружены:', topMasters);
+    renderTopMasters(topMasters);
+
+  } catch (err) {
+    console.error("❌ Ошибка загрузки топ мастеров:", err);
+    renderTopMasters([]);
+  }
 }
 
-function createStatCard(icon, value, label, change) {
-  const card = document.createElement('div');
-  card.className = 'stat-card fade-in';
-  card.innerHTML = `
-    <div class="stat-header">
-      <div class="stat-icon">${icon}</div>
+function renderTopMasters(masters) {
+  const container = document.getElementById('topMastersList');
+  if (!container) {
+    console.warn('⚠️ Контейнер topMastersList не найден');
+    return;
+  }
+
+  if (!masters.length) {
+    container.innerHTML = `
+      <div style="text-align: center; color: rgba(255,255,255,0.6);">
+        <p>Нет данных о мастерах</p>
+      </div>`;
+    return;
+  }
+
+  container.innerHTML = masters.map((master, index) => `
+    <div style="display: flex; justify-content: space-between; align-items: center;
+                padding: 0.75rem; background: rgba(0, 255, 255, 0.05);
+                border-radius: 8px; margin-bottom: 0.5rem; border: 1px solid rgba(0, 255, 255, 0.1);">
+      <div style="display: flex; align-items: center; gap: 0.75rem;">
+        <div style="width: 32px; height: 32px; background: linear-gradient(45deg, #00ffff, #0099ff);
+                    border-radius: 50%; display: flex; align-items: center; justify-content: center;
+                    font-weight: bold; color: #000; font-size: 14px;">
+          ${index + 1}
+        </div>
+        <div>
+          <div style="font-weight: 600; color: #00ffff;">${master.full_name}</div>
+          <div style="font-size: 0.85rem; color: rgba(255,255,255,0.6);">
+            ${master.completed_repairs || 0} ремонтов за месяц
+          </div>
+        </div>
+      </div>
+      <div style="text-align: right; font-size: 0.85rem; color: rgba(255,255,255,0.8);">
+        <div>${(master.avg_days || 0).toFixed(1)} дней</div>
+        <div style="color: rgba(255,255,255,0.5);">среднее время</div>
+      </div>
     </div>
-    <div class="stat-value">${value}</div>
-    <div class="stat-label">${label}</div>
-    <div class="stat-change">${change}</div>
-  `;
-  return card;
+  `).join('');
+
+  console.log('✅ Топ мастера отображены');
 }
 
-// 🧾 Загрузка последних заявок (без изменений)
+// 📱 Загрузка статистики по устройствам
+async function loadDeviceStats() {
+  try {
+    console.log('📱 Загружаем статистику по устройствам...');
+    const res = await fetch("/dashboard/api/stats/devices", {
+      credentials: "include"
+    });
+
+    if (!res.ok) throw new Error("Ошибка загрузки статистики устройств");
+
+    const deviceStats = await res.json();
+    console.log('✅ Статистика устройств загружена:', deviceStats);
+    renderDeviceStats(deviceStats);
+
+  } catch (err) {
+    console.error("❌ Ошибка загрузки статистики устройств:", err);
+    renderDeviceStats([]);
+  }
+}
+
+function renderDeviceStats(devices) {
+  const container = document.getElementById('deviceStatsList');
+  if (!container) {
+    console.warn('⚠️ Контейнер deviceStatsList не найден');
+    return;
+  }
+
+  if (!devices.length) {
+    container.innerHTML = `
+      <div style="text-align: center; color: rgba(255,255,255,0.6);">
+        <p>Нет данных об устройствах</p>
+      </div>`;
+    return;
+  }
+
+  // Определяем иконки для типов устройств
+  const deviceIcons = {
+    'Настольный ПК': '🖥️',
+    'Ноутбук': '💻',
+    'Моноблок': '🖥️',
+    'Сервер': '🗄️',
+    'Другое': '📱'
+  };
+
+  container.innerHTML = devices.slice(0, 5).map(device => `
+    <div style="display: flex; justify-content: space-between; align-items: center;
+                padding: 0.75rem; background: rgba(0, 255, 255, 0.05);
+                border-radius: 8px; margin-bottom: 0.5rem; border: 1px solid rgba(0, 255, 255, 0.1);">
+      <div style="display: flex; align-items: center; gap: 0.75rem;">
+        <div style="font-size: 1.5rem;">
+          ${deviceIcons[device.device_type] || '📱'}
+        </div>
+        <div>
+          <div style="font-weight: 600; color: #00ffff;">${device.device_type}</div>
+          <div style="font-size: 0.85rem; color: rgba(255,255,255,0.6);">
+            ${device.count || 0} заявок за месяц
+          </div>
+        </div>
+      </div>
+      <div style="text-align: right; font-size: 0.85rem; color: rgba(255,255,255,0.8);">
+        <div style="color: #00ff00;">${device.completed || 0} выполнено</div>
+        <div style="color: rgba(255,255,255,0.5);">
+          ₽${(device.avg_cost || 0).toLocaleString('ru-RU')}
+        </div>
+      </div>
+    </div>
+  `).join('');
+
+  console.log('✅ Статистика устройств отображена');
+}
+
+// 🧾 Загрузка последних заявок
 async function loadDashboardRequests() {
   try {
+    console.log('🧾 Загружаем последние заявки...');
     const res = await fetch("/dashboard/api/requests", {
       credentials: "include"
     });
 
     if (res.status === 401) {
+      console.log('❌ 401 - перенаправляем на login');
       window.location.href = "/auth/login";
       return;
     }
 
-    if (!res.ok) throw new Error("Ошибка загрузки заявок");
+    if (!res.ok) throw new Error(`Ошибка загрузки заявок: ${res.status}`);
 
     const requests = await res.json();
+    console.log('✅ Заявки загружены:', requests.length);
     renderRequestsTable(requests.slice(0, 5));
   } catch (err) {
-    console.error("Ошибка загрузки заявок:", err);
+    console.error("❌ Ошибка загрузки заявок:", err);
     renderRequestsTable([]);
   }
 }
 
-// 👤 Загрузка информации о пользователе (без изменений)
+// 👤 Загрузка информации о пользователе
 async function loadUserInfo() {
   try {
+    console.log('👤 Загружаем информацию о пользователе...');
     const res = await fetch("/auth/profile", {
       credentials: "include"
     });
 
     if (res.status === 401) {
+      console.log('❌ 401 - перенаправляем на login');
       window.location.href = "/auth/login";
       return;
     }
 
-    if (!res.ok) throw new Error("Ошибка загрузки профиля");
+    if (!res.ok) throw new Error(`Ошибка загрузки профиля: ${res.status}`);
 
     const user = await res.json();
+    console.log('✅ Профиль пользователя загружен:', user);
 
     const userName = document.getElementById('userName');
     const userRole = document.getElementById('userRole');
@@ -145,38 +273,46 @@ async function loadUserInfo() {
       userAvatar.textContent = user.full_name.charAt(0).toUpperCase();
     }
 
+    // Показываем пункт "Пользователи" для админов/директоров
     if (user.role === 'admin' || user.role === 'director') {
       const usersMenuItem = document.getElementById('usersMenuItem');
       if (usersMenuItem) usersMenuItem.style.display = 'block';
     }
 
   } catch (err) {
-    console.error("Ошибка загрузки профиля:", err);
+    console.error("❌ Ошибка загрузки профиля:", err);
   }
 }
 
 // 📈 Загрузка и создание графиков
 async function loadCharts() {
   try {
+    console.log('📈 Загружаем данные для графиков...');
+
     // Загружаем данные для графиков
-    const [weeklyData, deviceData] = await Promise.all([
+    const [weeklyData, statsData] = await Promise.all([
       fetch("/dashboard/api/charts/weekly", { credentials: "include" }).then(r => r.json()),
-      fetch("/dashboard/api/stats", { credentials: "include" }).then(r => r.json())
+      fetch("/dashboard/api/stats/detailed", { credentials: "include" }).then(r => r.json())
     ]);
+
+    console.log('✅ Данные графиков загружены');
 
     // Создаем графики
     createWeeklyChart(weeklyData);
-    createStatusChart(deviceData.status_stats || []);
+    createStatusChart(statsData.status_stats || []);
 
   } catch (err) {
-    console.error("Ошибка загрузки данных для графиков:", err);
+    console.error("❌ Ошибка загрузки данных для графиков:", err);
     createPlaceholderCharts();
   }
 }
 
 function createWeeklyChart(data) {
   const canvas = document.getElementById('weeklyChart');
-  if (!canvas) return;
+  if (!canvas) {
+    console.warn('⚠️ Canvas weeklyChart не найден');
+    return;
+  }
 
   const ctx = canvas.getContext('2d');
 
@@ -196,11 +332,16 @@ function createWeeklyChart(data) {
       }
     ]
   });
+
+  console.log('✅ График за неделю создан');
 }
 
 function createStatusChart(statusData) {
   const canvas = document.getElementById('statusChart');
-  if (!canvas) return;
+  if (!canvas) {
+    console.warn('⚠️ Canvas statusChart не найден');
+    return;
+  }
 
   const ctx = canvas.getContext('2d');
 
@@ -212,6 +353,7 @@ function createStatusChart(statusData) {
   ];
 
   drawPieChart(ctx, data);
+  console.log('✅ График статусов создан');
 }
 
 function drawLineChart(ctx, chartData) {
@@ -242,7 +384,7 @@ function drawLineChart(ctx, chartData) {
 
   // Найдем максимальное значение
   const maxValue = Math.max(...datasets.flatMap(d => d.data));
-  const stepY = chartHeight / maxValue;
+  const stepY = chartHeight / (maxValue || 1);
 
   // Рисуем оси
   ctx.beginPath();
@@ -309,6 +451,8 @@ function drawPieChart(ctx, data) {
   const colors = ['#00ffff', '#00ff00', '#ffff00', '#ff9800', '#ff4444'];
 
   const total = data.reduce((sum, item) => sum + item.count, 0);
+  if (total === 0) return;
+
   let startAngle = -Math.PI / 2;
 
   data.forEach((item, index) => {
@@ -340,7 +484,8 @@ function drawPieChart(ctx, data) {
 }
 
 function createPlaceholderCharts() {
-  // Создаем заглушки для графиков
+  console.log('⚠️ Создаем заглушки для графиков');
+
   const weeklyCanvas = document.getElementById('weeklyChart');
   const statusCanvas = document.getElementById('statusChart');
 
@@ -351,7 +496,7 @@ function createPlaceholderCharts() {
     ctx.fillStyle = '#ffffff';
     ctx.font = '16px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('Загрузка данных...', weeklyCanvas.width/2, weeklyCanvas.height/2);
+    ctx.fillText('Нет данных для отображения', weeklyCanvas.width/2, weeklyCanvas.height/2);
   }
 
   if (statusCanvas) {
@@ -361,20 +506,23 @@ function createPlaceholderCharts() {
     ctx.fillStyle = '#ffffff';
     ctx.font = '16px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('Загрузка данных...', statusCanvas.width/2, statusCanvas.height/2);
+    ctx.fillText('Нет данных для отображения', statusCanvas.width/2, statusCanvas.height/2);
   }
 }
 
-// 🖊️ Отображение заявок в таблице (без изменений)
+// 🖊️ Отображение заявок в таблице
 function renderRequestsTable(requests) {
   const tbody = document.getElementById("recentRequestsTable");
 
-  if (!tbody) return;
+  if (!tbody) {
+    console.warn('⚠️ Элемент recentRequestsTable не найден');
+    return;
+  }
 
   if (!requests.length) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="8" style="text-align: center; color: rgba(255,255,255,0.6);">
+        <td colspan="8" style="text-align: center; color: rgba(255,255,255,0.6); padding: 2rem;">
           Нет данных для отображения
         </td>
       </tr>`;
@@ -383,20 +531,22 @@ function renderRequestsTable(requests) {
 
   tbody.innerHTML = requests.map(r => `
     <tr>
-      <td>#${r.request_id || '—'}</td>
+      <td style="color: #00ffff; font-weight: bold;">#${r.request_id || '—'}</td>
       <td>${r.client_name || '—'}</td>
       <td>${r.device_type || '—'}</td>
-      <td>${(r.problem_description || '').slice(0, 40)}...</td>
+      <td title="${r.problem_description || ''}">${(r.problem_description || '').slice(0, 40)}${(r.problem_description || '').length > 40 ? '...' : ''}</td>
       <td><span class="status-badge ${getStatusClass(r.status)}">${r.status || '—'}</span></td>
       <td>${r.master_name || '—'}</td>
       <td>${r.created_at ? new Date(r.created_at).toLocaleDateString('ru-RU') : '—'}</td>
       <td>
-        <a href="/dashboard/requests" class="btn btn-outline" style="padding: 4px 8px;">
+        <a href="/dashboard/requests" class="btn btn-outline" style="padding: 4px 8px; font-size: 0.85rem;">
           Подробнее
         </a>
       </td>
     </tr>
   `).join('');
+
+  console.log('✅ Таблица заявок обновлена');
 }
 
 function getStatusClass(status) {
@@ -412,12 +562,49 @@ function getStatusClass(status) {
   return statusMap[status] || 'status-new';
 }
 
+// Дополнительные функции для переключения графиков
+async function loadWeeklyChart() {
+  try {
+    const data = await fetch("/dashboard/api/charts/weekly", { credentials: "include" }).then(r => r.json());
+    createWeeklyChart(data);
+    console.log('✅ График за неделю обновлен');
+  } catch (err) {
+    console.error("❌ Ошибка загрузки недельного графика:", err);
+  }
+}
+
+async function loadMonthlyChart() {
+  try {
+    const data = await fetch("/dashboard/api/charts/monthly", { credentials: "include" }).then(r => r.json());
+    createWeeklyChart(data); // Используем ту же функцию, но с месячными данными
+    console.log('✅ График за месяц обновлен');
+  } catch (err) {
+    console.error("❌ Ошибка загрузки месячного графика:", err);
+  }
+}
+
 // Утилиты
 function logout() {
+  console.log('🚪 Выход из системы');
   window.location.href = "/logout";
 }
 
 function toggleSidebar() {
   const sidebar = document.getElementById('sidebar');
-  if (sidebar) sidebar.classList.toggle('active');
+  if (sidebar) {
+    sidebar.classList.toggle('active');
+    console.log('📱 Sidebar переключен');
+  }
 }
+
+// Функция для принудительного обновления всех данных
+function refreshDashboard() {
+  console.log('🔄 Принудительное обновление dashboard...');
+  loadDashboardStats();
+  loadDashboardRequests();
+  loadCharts();
+  loadTopMasters();
+  loadDeviceStats();
+}
+
+console.log('✅ Dashboard.js загружен и готов к работе');

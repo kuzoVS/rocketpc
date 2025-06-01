@@ -118,7 +118,7 @@ class PostgreSQLDatabase:
                     estimated_cost DECIMAL(10, 2),
                     final_cost DECIMAL(10, 2),
                     estimated_completion DATE,
-                    actual_completion DATE,
+                    actual_completion DATE, -- Автоматически при статусе Готова к выдаче
                     assigned_master_id INTEGER REFERENCES users(id),
                     assigned_by_id INTEGER REFERENCES users(id), -- Кто назначил мастера
                     assigned_at TIMESTAMP, -- Когда был назначен мастер
@@ -907,6 +907,179 @@ class PostgreSQLDatabase:
             ''')
 
             return [dict(row) for row in device_stats]
+
+    # Добавьте эти методы в класс PostgreSQLDatabase в app/database_pg.py
+
+    async def update_repair_request_full(self, request_id: str, update_data: dict, user_id: int) -> bool:
+        """Полное обновление заявки на ремонт"""
+        async with self.pool.acquire() as conn:
+            try:
+                # Получаем текущие данные заявки
+                current_request = await conn.fetchrow('''
+                    SELECT * FROM repair_requests WHERE request_id = $1 AND is_archived = FALSE
+                ''', request_id)
+
+                if not current_request:
+                    return False
+
+                # Подготавливаем список полей для обновления
+                set_clauses = []
+                values = []
+                param_count = 1
+
+                # Мапинг полей для обновления
+                updatable_fields = {
+                    'device_type': 'device_type',
+                    'brand': 'brand',
+                    'model': 'model',
+                    'serial_number': 'serial_number',
+                    'problem_description': 'problem_description',
+                    'status': 'status',
+                    'priority': 'priority',
+                    'estimated_cost': 'estimated_cost',
+                    'final_cost': 'final_cost',
+                    'estimated_completion': 'estimated_completion',
+                    'warranty_period': 'warranty_period',
+                    'repair_duration_hours': 'repair_duration_hours',
+                    'parts_used': 'parts_used',
+                    'notes': 'notes'
+                }
+
+                # Обрабатываем каждое поле
+                for field_name, db_field in updatable_fields.items():
+                    if field_name in update_data and update_data[field_name] is not None:
+                        set_clauses.append(f"{db_field} = ${param_count}")
+                        values.append(update_data[field_name])
+                        param_count += 1
+
+                # Автоматическое заполнение actual_completion при статусе "Выдана"
+                if 'status' in update_data and update_data['status'] == 'Выдана':
+                    if not current_request['actual_completion']:
+                        set_clauses.append(f"actual_completion = ${param_count}")
+                        values.append(datetime.now())
+                        param_count += 1
+
+                # Добавляем updated_at
+                set_clauses.append(f"updated_at = ${param_count}")
+                values.append(datetime.now())
+                param_count += 1
+
+                if not set_clauses:
+                    return True  # Нет изменений
+
+                # Выполняем обновление
+                query = f'''
+                    UPDATE repair_requests 
+                    SET {', '.join(set_clauses)}
+                    WHERE request_id = ${param_count}
+                '''
+                values.append(request_id)
+
+                await conn.execute(query, *values)
+
+                # Записываем изменения в историю если изменился статус
+                if 'status' in update_data:
+                    old_status = current_request['status']
+                    new_status = update_data['status']
+
+                    if old_status != new_status:
+                        comment = update_data.get('comment', f'Статус изменен с "{old_status}" на "{new_status}"')
+
+                        await conn.execute('''
+                            INSERT INTO status_history (request_id, old_status, new_status, changed_by, comment)
+                            VALUES (
+                                (SELECT id FROM repair_requests WHERE request_id = $1),
+                                $2, $3, $4, $5
+                            )
+                        ''', request_id, old_status, new_status, user_id, comment)
+
+                return True
+
+            except Exception as e:
+                print(f"❌ Ошибка обновления заявки: {e}")
+                return False
+
+    async def get_repair_request_full(self, request_id: str) -> Optional[Dict]:
+        """Получение полной информации о заявке для редактирования"""
+        async with self.pool.acquire() as conn:
+            request = await conn.fetchrow('''
+                SELECT 
+                    rr.*,
+                    c.full_name as client_name, 
+                    c.phone as client_phone,
+                    c.email as client_email,
+                    c.address as client_address,
+                    c.is_vip as client_is_vip,
+                    master.full_name as master_name,
+                    master.phone as master_phone,
+                    master.specialization as master_specialization,
+                    assigned_by.full_name as assigned_by_name,
+                    created_by.full_name as created_by_name
+                FROM repair_requests rr
+                LEFT JOIN clients c ON rr.client_id = c.id
+                LEFT JOIN users master ON rr.assigned_master_id = master.id
+                LEFT JOIN users assigned_by ON rr.assigned_by_id = assigned_by.id
+                LEFT JOIN users created_by ON rr.created_by_id = created_by.id
+                WHERE rr.request_id = $1 AND rr.is_archived = FALSE
+            ''', request_id)
+
+            return dict(request) if request else None
+
+    async def get_status_history(self, request_id: str) -> List[Dict]:
+        """Получение истории изменений статуса заявки"""
+        async with self.pool.acquire() as conn:
+            history = await conn.fetch('''
+                SELECT 
+                    sh.*,
+                    u.full_name as changed_by_name,
+                    u.role as changed_by_role
+                FROM status_history sh
+                LEFT JOIN users u ON sh.changed_by = u.id
+                WHERE sh.request_id = (
+                    SELECT id FROM repair_requests WHERE request_id = $1
+                )
+                ORDER BY sh.changed_at DESC
+            ''', request_id)
+
+            return [dict(record) for record in history]
+
+    async def update_client_info(self, client_id: int, client_data: dict) -> bool:
+        """Обновление информации о клиенте"""
+        async with self.pool.acquire() as conn:
+            try:
+                set_clauses = []
+                values = []
+                param_count = 1
+
+                updatable_fields = {
+                    'full_name': 'full_name',
+                    'phone': 'phone',
+                    'email': 'email',
+                    'address': 'address'
+                }
+
+                for field_name, db_field in updatable_fields.items():
+                    if field_name in client_data and client_data[field_name] is not None:
+                        set_clauses.append(f"{db_field} = ${param_count}")
+                        values.append(client_data[field_name])
+                        param_count += 1
+
+                if not set_clauses:
+                    return True
+
+                query = f'''
+                    UPDATE clients 
+                    SET {', '.join(set_clauses)}
+                    WHERE id = ${param_count}
+                '''
+                values.append(client_id)
+
+                await conn.execute(query, *values)
+                return True
+
+            except Exception as e:
+                print(f"❌ Ошибка обновления клиента: {e}")
+                return False
 
 # Создание глобального экземпляра
 db = PostgreSQLDatabase()
