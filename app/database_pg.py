@@ -744,6 +744,169 @@ class PostgreSQLDatabase:
                 'status_stats': [dict(row) for row in status_stats]
             }
 
+    # Добавьте эти методы в класс PostgreSQLDatabase в файле app/database_pg.py
+
+    async def get_detailed_statistics(self) -> Dict:
+        """Получение детальной статистики для dashboard"""
+        async with self.pool.acquire() as conn:
+            # Базовая статистика
+            total_requests = await conn.fetchval('''
+                SELECT COUNT(*) FROM repair_requests WHERE is_archived = FALSE
+            ''')
+
+            # Активные заявки (не завершенные)
+            active_requests = await conn.fetchval('''
+                SELECT COUNT(*) FROM repair_requests 
+                WHERE status NOT IN ('Выдана') AND is_archived = FALSE
+            ''')
+
+            # Завершенные за текущий месяц
+            completed_this_month = await conn.fetchval('''
+                SELECT COUNT(*) FROM repair_requests 
+                WHERE status = 'Выдана' 
+                AND EXTRACT(MONTH FROM created_at) = EXTRACT(MONTH FROM CURRENT_DATE)
+                AND EXTRACT(YEAR FROM created_at) = EXTRACT(YEAR FROM CURRENT_DATE)
+            ''')
+
+            # Завершенные за прошлый месяц для расчета роста
+            completed_last_month = await conn.fetchval('''
+                SELECT COUNT(*) FROM repair_requests 
+                WHERE status = 'Выдана' 
+                AND EXTRACT(MONTH FROM created_at) = EXTRACT(MONTH FROM CURRENT_DATE - INTERVAL '1 month')
+                AND EXTRACT(YEAR FROM created_at) = EXTRACT(YEAR FROM CURRENT_DATE - INTERVAL '1 month')
+            ''')
+
+            # Статистика по статусам
+            status_stats = await conn.fetch('''
+                SELECT status, COUNT(*) as count
+                FROM repair_requests 
+                WHERE is_archived = FALSE
+                GROUP BY status
+                ORDER BY count DESC
+            ''')
+
+            # Статистика по приоритетам
+            priority_stats = await conn.fetch('''
+                SELECT priority, COUNT(*) as count
+                FROM repair_requests 
+                WHERE is_archived = FALSE
+                GROUP BY priority
+                ORDER BY 
+                    CASE priority
+                        WHEN 'Критическая' THEN 1
+                        WHEN 'Высокая' THEN 2
+                        WHEN 'Обычная' THEN 3
+                        WHEN 'Низкая' THEN 4
+                    END
+            ''')
+
+            # Средняя стоимость ремонта
+            avg_cost = await conn.fetchval('''
+                SELECT AVG(final_cost) FROM repair_requests 
+                WHERE final_cost IS NOT NULL AND status = 'Выдана'
+            ''') or 0
+
+            # Среднее время ремонта в днях
+            avg_repair_time = await conn.fetchval('''
+                SELECT AVG(EXTRACT(EPOCH FROM (actual_completion - created_at))/86400)
+                FROM repair_requests 
+                WHERE actual_completion IS NOT NULL
+            ''') or 0
+
+            # Топ мастеров по количеству выполненных работ за месяц
+            top_masters = await conn.fetch('''
+                SELECT 
+                    u.full_name,
+                    COUNT(rr.id) as completed_repairs,
+                    AVG(EXTRACT(EPOCH FROM (rr.actual_completion - rr.created_at))/86400) as avg_days
+                FROM users u
+                LEFT JOIN repair_requests rr ON u.id = rr.assigned_master_id
+                WHERE u.role = 'master' 
+                    AND rr.status = 'Выдана'
+                    AND rr.actual_completion >= CURRENT_DATE - INTERVAL '30 days'
+                GROUP BY u.id, u.full_name
+                ORDER BY completed_repairs DESC
+                LIMIT 5
+            ''')
+
+            # Расчет процента роста
+            growth_percentage = 0
+            if completed_last_month > 0:
+                growth_percentage = ((completed_this_month - completed_last_month) / completed_last_month) * 100
+
+            return {
+                'total_requests': total_requests,
+                'active_requests': active_requests,
+                'completed_this_month': completed_this_month,
+                'completed_last_month': completed_last_month,
+                'growth_percentage': round(growth_percentage, 1),
+                'avg_cost': round(float(avg_cost), 2),
+                'avg_repair_time': round(float(avg_repair_time), 1),
+                'status_stats': [dict(row) for row in status_stats],
+                'priority_stats': [dict(row) for row in priority_stats],
+                'top_masters': [dict(row) for row in top_masters],
+                'monthly_revenue': round(float(avg_cost) * completed_this_month, 2) if avg_cost else 0
+            }
+
+    async def get_weekly_chart_data(self) -> Dict:
+        """Получение данных для графика заявок за неделю"""
+        async with self.pool.acquire() as conn:
+            weekly_data = await conn.fetch('''
+                SELECT 
+                    DATE(created_at) as date,
+                    COUNT(*) as requests_count,
+                    COUNT(CASE WHEN status = 'Выдана' THEN 1 END) as completed_count
+                FROM repair_requests 
+                WHERE created_at >= CURRENT_DATE - INTERVAL '7 days'
+                    AND is_archived = FALSE
+                GROUP BY DATE(created_at)
+                ORDER BY date
+            ''')
+
+            return {
+                'labels': [row['date'].strftime('%d.%m') for row in weekly_data],
+                'requests': [row['requests_count'] for row in weekly_data],
+                'completed': [row['completed_count'] for row in weekly_data]
+            }
+
+    async def get_monthly_chart_data(self) -> Dict:
+        """Получение данных для графика заявок за месяц"""
+        async with self.pool.acquire() as conn:
+            monthly_data = await conn.fetch('''
+                SELECT 
+                    DATE_TRUNC('week', created_at) as week_start,
+                    COUNT(*) as requests_count,
+                    COUNT(CASE WHEN status = 'Выдана' THEN 1 END) as completed_count
+                FROM repair_requests 
+                WHERE created_at >= CURRENT_DATE - INTERVAL '30 days'
+                    AND is_archived = FALSE
+                GROUP BY DATE_TRUNC('week', created_at)
+                ORDER BY week_start
+            ''')
+
+            return {
+                'labels': [f"Неделя {i + 1}" for i in range(len(monthly_data))],
+                'requests': [row['requests_count'] for row in monthly_data],
+                'completed': [row['completed_count'] for row in monthly_data]
+            }
+
+    async def get_device_type_stats(self) -> List[Dict]:
+        """Статистика по типам устройств"""
+        async with self.pool.acquire() as conn:
+            device_stats = await conn.fetch('''
+                SELECT 
+                    device_type,
+                    COUNT(*) as count,
+                    COUNT(CASE WHEN status = 'Выдана' THEN 1 END) as completed,
+                    AVG(CASE WHEN final_cost IS NOT NULL THEN final_cost END) as avg_cost
+                FROM repair_requests 
+                WHERE is_archived = FALSE
+                    AND created_at >= CURRENT_DATE - INTERVAL '30 days'
+                GROUP BY device_type
+                ORDER BY count DESC
+            ''')
+
+            return [dict(row) for row in device_stats]
 
 # Создание глобального экземпляра
 db = PostgreSQLDatabase()

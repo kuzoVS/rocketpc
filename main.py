@@ -246,6 +246,77 @@ async def archive_request_api(request_id: str, token_data: Dict = Depends(requir
 
 app.include_router(dashboard.router)
 
+@app.get("/dashboard/api/stats/detailed")
+async def get_detailed_stats(token_data: Dict = Depends(verify_token_from_cookie)):
+    """Детальная статистика для главной страницы"""
+    try:
+        print(f"📊 Запрос детальной статистики от пользователя: {token_data.get('username')}")
+        stats = await db.get_detailed_statistics()
+        return stats
+    except Exception as e:
+        print(f"❌ Ошибка получения детальной статистики: {e}")
+        return {
+            'total_requests': 0,
+            'active_requests': 0,
+            'completed_this_month': 0,
+            'completed_last_month': 0,
+            'growth_percentage': 0,
+            'avg_cost': 0,
+            'avg_repair_time': 0,
+            'status_stats': [],
+            'priority_stats': [],
+            'top_masters': [],
+            'monthly_revenue': 0
+        }
+
+@app.get("/dashboard/api/charts/weekly")
+async def get_weekly_chart(token_data: Dict = Depends(verify_token_from_cookie)):
+    """Данные для графика за неделю"""
+    try:
+        chart_data = await db.get_weekly_chart_data()
+        return chart_data
+    except Exception as e:
+        print(f"❌ Ошибка получения данных графика: {e}")
+        return {
+            'labels': [],
+            'requests': [],
+            'completed': []
+        }
+
+@app.get("/dashboard/api/charts/monthly")
+async def get_monthly_chart(token_data: Dict = Depends(verify_token_from_cookie)):
+    """Данные для графика за месяц"""
+    try:
+        chart_data = await db.get_monthly_chart_data()
+        return chart_data
+    except Exception as e:
+        print(f"❌ Ошибка получения месячных данных: {e}")
+        return {
+            'labels': [],
+            'requests': [],
+            'completed': []
+        }
+
+@app.get("/dashboard/api/stats/devices")
+async def get_device_stats(token_data: Dict = Depends(verify_token_from_cookie)):
+    """Статистика по типам устройств"""
+    try:
+        device_stats = await db.get_device_type_stats()
+        return device_stats
+    except Exception as e:
+        print(f"❌ Ошибка получения статистики устройств: {e}")
+        return []
+
+@app.get("/dashboard/api/stats/masters")
+async def get_masters_performance(token_data: Dict = Depends(verify_token_from_cookie)):
+    """Производительность мастеров"""
+    try:
+        masters_data = await db.get_masters_dashboard()
+        return masters_data
+    except Exception as e:
+        print(f"❌ Ошибка получения данных мастеров: {e}")
+        return []
+
 @app.get("/auth/login", response_class=HTMLResponse)
 async def login_page(request: Request):
     return templates.TemplateResponse("auth/login.html", {"request": request})
