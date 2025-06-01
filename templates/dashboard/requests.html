@@ -126,6 +126,12 @@
             gap: 1rem;
         }
 
+        .form-row-three {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 1rem;
+        }
+
         .info-grid {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
@@ -254,6 +260,69 @@
                 transform: translateX(0);
                 opacity: 1;
             }
+        }
+
+        /* Дополнительные стили для полной формы редактирования */
+        .tabs {
+            display: flex;
+            border-bottom: 1px solid rgba(0, 255, 255, 0.2);
+            margin-bottom: 2rem;
+        }
+
+        .tab {
+            padding: 1rem 1.5rem;
+            background: transparent;
+            border: none;
+            color: rgba(255, 255, 255, 0.6);
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.3s ease;
+        }
+
+        .tab.active {
+            color: #00ffff;
+            border-bottom-color: #00ffff;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .section-title {
+            font-size: 1.2rem;
+            color: #00ffff;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid rgba(0, 255, 255, 0.2);
+        }
+
+        .client-edit {
+            background: rgba(0, 255, 255, 0.05);
+            padding: 1rem;
+            border-radius: 8px;
+            border: 1px solid rgba(0, 255, 255, 0.1);
+            margin-bottom: 1rem;
+        }
+
+        .currency-input {
+            position: relative;
+        }
+
+        .currency-input::before {
+            content: '₽';
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        .currency-input input {
+            padding-right: 30px;
         }
     </style>
 </head>
@@ -461,79 +530,196 @@
         </div>
     </div>
 
-    <!-- Модальное окно редактирования заявки -->
+    <!-- Модальное окно полного редактирования заявки -->
     <div id="editRequestModal" class="modal" style="display: none;">
-        <div class="modal-content" style="max-width: 800px;">
+        <div class="modal-content" style="max-width: 900px; max-height: 90vh; overflow-y: auto;">
             <div class="modal-header">
                 <h2 class="modal-title">Редактирование заявки</h2>
                 <button class="close" onclick="closeModal('editRequestModal')">×</button>
             </div>
 
-            <div class="info-grid">
-                <div class="info-item">
-                    <div class="info-label">ID заявки</div>
-                    <div class="info-value" id="editRequestId">-</div>
-                </div>
-                <div class="info-item">
-                    <div class="info-label">Дата создания</div>
-                    <div class="info-value" id="editCreatedAt">-</div>
-                </div>
-                <div class="info-item">
-                    <div class="info-label">Клиент</div>
-                    <div class="info-value" id="editClientInfo">-</div>
-                </div>
-                <div class="info-item">
-                    <div class="info-label">Устройство</div>
-                    <div class="info-value" id="editDeviceInfo">-</div>
-                </div>
+            <!-- Вкладки -->
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab('basic')">Основная информация</button>
+                <button class="tab" onclick="switchTab('device')">Устройство</button>
+                <button class="tab" onclick="switchTab('financial')">Финансы</button>
+                <button class="tab" onclick="switchTab('notes')">Заметки</button>
             </div>
 
             <form id="editRequestForm">
-                <div class="form-group">
-                    <label>Описание проблемы</label>
-                    <textarea id="editProblemDescription" rows="4"></textarea>
-                </div>
-
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>Статус *</label>
-                        <select id="editStatus" required>
-                            <option value="Принята">Принята</option>
-                            <option value="Диагностика">Диагностика</option>
-                            <option value="Ожидание запчастей">Ожидание запчастей</option>
-                            <option value="В ремонте">В ремонте</option>
-                            <option value="Тестирование">Тестирование</option>
-                            <option value="Готова к выдаче">Готова к выдаче</option>
-                            <option value="Выдана">Выдана</option>
-                        </select>
+                <!-- Вкладка: Основная информация -->
+                <div id="basicTab" class="tab-content active">
+                    <div class="info-grid">
+                        <div class="info-item">
+                            <div class="info-label">ID заявки</div>
+                            <div class="info-value" id="editRequestId">-</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="info-label">Дата создания</div>
+                            <div class="info-value" id="editCreatedAt">-</div>
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label>Приоритет</label>
-                        <select id="editPriority">
-                            <option value="Низкая">Низкая</option>
-                            <option value="Обычная">Обычная</option>
-                            <option value="Высокая">Высокая</option>
-                            <option value="Критическая">Критическая</option>
-                        </select>
-                    </div>
-                </div>
 
-                <div class="form-row">
+                    <!-- Редактирование клиента -->
+                    <div class="client-edit">
+                        <h4 class="section-title">Информация о клиенте</h4>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Имя клиента</label>
+                                <input type="text" id="editClientName">
+                            </div>
+                            <div class="form-group">
+                                <label>Телефон</label>
+                                <input type="tel" id="editClientPhone">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Email</label>
+                                <input type="email" id="editClientEmail">
+                            </div>
+                            <div class="form-group">
+                                <label>Адрес</label>
+                                <input type="text" id="editClientAddress">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Статус и приоритет -->
+                    <h4 class="section-title">Статус заявки</h4>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Статус *</label>
+                            <select id="editStatus" required>
+                                <option value="Принята">Принята</option>
+                                <option value="Диагностика">Диагностика</option>
+                                <option value="Ожидание запчастей">Ожидание запчастей</option>
+                                <option value="В ремонте">В ремонте</option>
+                                <option value="Тестирование">Тестирование</option>
+                                <option value="Готова к выдаче">Готова к выдаче</option>
+                                <option value="Выдана">Выдана</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Приоритет</label>
+                            <select id="editPriority">
+                                <option value="Низкая">Низкая</option>
+                                <option value="Обычная">Обычная</option>
+                                <option value="Высокая">Высокая</option>
+                                <option value="Критическая">Критическая</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Назначение мастера -->
                     <div class="form-group">
-                        <label>Мастер</label>
+                        <label>Назначенный мастер</label>
                         <select id="editMaster">
                             <option value="">Загрузка мастеров...</option>
                         </select>
                     </div>
+                </div>
+
+                <!-- Вкладка: Устройство -->
+                <div id="deviceTab" class="tab-content">
+                    <h4 class="section-title">Информация об устройстве</h4>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Тип устройства</label>
+                            <select id="editDeviceType">
+                                <option value="Настольный ПК">Настольный ПК</option>
+                                <option value="Ноутбук">Ноутбук</option>
+                                <option value="Моноблок">Моноблок</option>
+                                <option value="Сервер">Сервер</option>
+                                <option value="Другое">Другое</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Серийный номер</label>
+                            <input type="text" id="editSerialNumber" placeholder="SN123456789">
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Бренд</label>
+                            <input type="text" id="editBrand" placeholder="ASUS, HP, Dell...">
+                        </div>
+                        <div class="form-group">
+                            <label>Модель</label>
+                            <input type="text" id="editModel" placeholder="VivoBook 15, OptiPlex...">
+                        </div>
+                    </div>
+
                     <div class="form-group">
-                        <label>Предполагаемая стоимость</label>
-                        <input type="number" id="editEstimatedCost" placeholder="0">
+                        <label>Описание проблемы</label>
+                        <textarea id="editProblemDescription" rows="4"></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Использованные запчасти</label>
+                        <textarea id="editPartsUsed" rows="3" placeholder="Материнская плата, блок питания..."></textarea>
                     </div>
                 </div>
 
-                <div class="form-group">
-                    <label>Комментарий к изменению</label>
-                    <textarea id="editComment" rows="2" placeholder="Причина изменения статуса..."></textarea>
+                <!-- Вкладка: Финансы -->
+                <div id="financialTab" class="tab-content">
+                    <h4 class="section-title">Финансовая информация</h4>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Предварительная стоимость</label>
+                            <div class="currency-input">
+                                <input type="number" id="editEstimatedCost" min="0" step="100" placeholder="0">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Итоговая стоимость</label>
+                            <div class="currency-input">
+                                <input type="number" id="editFinalCost" min="0" step="100" placeholder="0">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Время выполнения (часы)</label>
+                            <input type="number" id="editRepairDuration" min="0" step="0.5" placeholder="0">
+                        </div>
+                        <div class="form-group">
+                            <label>Гарантия (дни)</label>
+                            <input type="number" id="editWarrantyPeriod" min="0" max="365" placeholder="30">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Предполагаемая дата завершения</label>
+                        <input type="date" id="editEstimatedCompletion">
+                    </div>
+                </div>
+
+                <!-- Вкладка: Заметки -->
+                <div id="notesTab" class="tab-content">
+                    <h4 class="section-title">Дополнительная информация</h4>
+
+                    <div class="form-group">
+                        <label>Внутренние заметки</label>
+                        <textarea id="editNotes" rows="4" placeholder="Дополнительная информация для внутреннего использования..."></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Комментарий к изменению</label>
+                        <textarea id="editComment" rows="3" placeholder="Причина изменения..."></textarea>
+                    </div>
+
+                    <!-- История изменений -->
+                    <div class="form-group">
+                        <label>История изменений</label>
+                        <div id="editHistory" style="max-height: 200px; overflow-y: auto; background: rgba(0, 255, 255, 0.05); border-radius: 8px; padding: 1rem;">
+                            <div style="text-align: center; color: rgba(255,255,255,0.6);">
+                                Загрузка истории...
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="modal-footer">
@@ -541,13 +727,13 @@
                         Отмена
                     </button>
                     <button type="submit" class="btn">
-                        Сохранить изменения
+                        Сохранить все изменения
                     </button>
                 </div>
             </form>
         </div>
     </div>
 
-    <script src="{{ url_for('static', path='/js/requests.js') }}?v=2"></script>
+    <script src="{{ url_for('static', path='/js/requests.js') }}?v=3"></script>
 </body>
 </html>
