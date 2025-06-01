@@ -284,203 +284,361 @@ async function loadUserInfo() {
   }
 }
 
-// 📈 Загрузка и создание графиков
-async function loadCharts() {
-  try {
-    console.log('📈 Загружаем данные для графиков...');
-
-    // Загружаем данные для графиков
-    const [weeklyData, statsData] = await Promise.all([
-      fetch("/dashboard/api/charts/weekly", { credentials: "include" }).then(r => r.json()),
-      fetch("/dashboard/api/stats/detailed", { credentials: "include" }).then(r => r.json())
-    ]);
-
-    console.log('✅ Данные графиков загружены');
-
-    // Создаем графики
-    createWeeklyChart(weeklyData);
-    createStatusChart(statsData.status_stats || []);
-
-  } catch (err) {
-    console.error("❌ Ошибка загрузки данных для графиков:", err);
-    createPlaceholderCharts();
-  }
-}
-
 function createWeeklyChart(data) {
-  const canvas = document.getElementById('weeklyChart');
-  if (!canvas) {
-    console.warn('⚠️ Canvas weeklyChart не найден');
-    return;
-  }
+    const canvas = document.getElementById('weeklyChart');
+    if (!canvas) {
+        console.warn('⚠️ Canvas weeklyChart не найден');
+        return;
+    }
 
-  const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d');
 
-  // Простой график с Canvas API
-  drawLineChart(ctx, {
-    labels: data.labels || ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
-    datasets: [
-      {
-        label: 'Новые заявки',
-        data: data.requests || [5, 8, 12, 7, 15, 10, 6],
-        color: '#00ffff'
-      },
-      {
-        label: 'Выполнено',
-        data: data.completed || [3, 6, 9, 5, 11, 8, 4],
-        color: '#00ff00'
-      }
-    ]
-  });
+    // Устанавливаем размеры canvas для четкости
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = rect.width * window.devicePixelRatio;
+    canvas.height = rect.height * window.devicePixelRatio;
+    ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
 
-  console.log('✅ График за неделю создан');
+    // Улучшенный график с анимацией и градиентами
+    drawEnhancedLineChart(ctx, {
+        labels: data.labels || ['29.05', '30.05', '31.05', '01.06', '02.06', '03.06', '04.06'],
+        datasets: [
+            {
+                label: 'Новые заявки',
+                data: data.requests || [5, 8, 12, 7, 15, 10, 6],
+                color: '#00ffff',
+                fillColor: 'rgba(0, 255, 255, 0.1)'
+            },
+            {
+                label: 'Выполнено',
+                data: data.completed || [3, 6, 9, 5, 11, 8, 4],
+                color: '#00ff00',
+                fillColor: 'rgba(0, 255, 0, 0.1)'
+            }
+        ]
+    }, rect.width, rect.height);
+
+    console.log('✅ Улучшенный график за неделю создан');
 }
 
 function createStatusChart(statusData) {
-  const canvas = document.getElementById('statusChart');
-  if (!canvas) {
-    console.warn('⚠️ Canvas statusChart не найден');
-    return;
-  }
+    const canvas = document.getElementById('statusChart');
+    if (!canvas) {
+        console.warn('⚠️ Canvas statusChart не найден');
+        return;
+    }
 
-  const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d');
 
-  // Простая круговая диаграмма
-  const data = statusData.length ? statusData : [
-    { status: 'В работе', count: 15 },
-    { status: 'Завершено', count: 25 },
-    { status: 'Ожидание', count: 8 }
-  ];
+    // Устанавливаем размеры canvas
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = rect.width * window.devicePixelRatio;
+    canvas.height = rect.height * window.devicePixelRatio;
+    ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
 
-  drawPieChart(ctx, data);
-  console.log('✅ График статусов создан');
+    // Данные по умолчанию или из API
+    const data = statusData.length ? statusData : [
+        { status: 'Диагностика', count: 2 },
+        { status: 'Выдана', count: 1 },
+        { status: 'Ожидание запчастей', count: 1 }
+    ];
+
+    drawEnhancedPieChart(ctx, data, rect.width, rect.height);
+    console.log('✅ Улучшенный график статусов создан');
 }
 
-function drawLineChart(ctx, chartData) {
-  const canvas = ctx.canvas;
-  const width = canvas.width;
-  const height = canvas.height;
-  const padding = 40;
+function drawEnhancedLineChart(ctx, chartData, width, height) {
+    // Очищаем canvas
+    ctx.clearRect(0, 0, width, height);
 
-  // Очищаем canvas
-  ctx.clearRect(0, 0, width, height);
+    const padding = 60;
+    const chartWidth = width - padding * 2;
+    const chartHeight = height - padding * 2;
 
-  // Настройка стилей
-  ctx.fillStyle = '#ffffff';
-  ctx.strokeStyle = '#00ffff';
-  ctx.lineWidth = 2;
-  ctx.font = '12px Arial';
+    const labels = chartData.labels;
+    const datasets = chartData.datasets;
 
-  // Получаем данные
-  const labels = chartData.labels;
-  const datasets = chartData.datasets;
+    if (!labels.length) return;
 
-  if (!labels.length) return;
+    // Находим максимальное значение
+    const maxValue = Math.max(...datasets.flatMap(d => d.data)) || 10;
+    const stepX = chartWidth / (labels.length - 1);
+    const stepY = chartHeight / maxValue;
 
-  // Расчет размеров
-  const chartWidth = width - padding * 2;
-  const chartHeight = height - padding * 2;
-  const stepX = chartWidth / (labels.length - 1);
+    // Рисуем сетку
+    drawGrid(ctx, padding, chartWidth, chartHeight, maxValue, labels.length);
 
-  // Найдем максимальное значение
-  const maxValue = Math.max(...datasets.flatMap(d => d.data));
-  const stepY = chartHeight / (maxValue || 1);
+    // Рисуем линии данных
+    datasets.forEach((dataset, index) => {
+        drawDataLine(ctx, dataset, padding, stepX, stepY, chartHeight, index);
+    });
 
-  // Рисуем оси
-  ctx.beginPath();
-  ctx.moveTo(padding, padding);
-  ctx.lineTo(padding, height - padding);
-  ctx.lineTo(width - padding, height - padding);
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-  ctx.stroke();
+    // Рисуем подписи осей
+    drawAxisLabels(ctx, labels, padding, stepX, chartHeight, maxValue, stepY);
 
-  // Рисуем подписи осей
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-  labels.forEach((label, i) => {
-    const x = padding + i * stepX;
-    ctx.fillText(label, x - 10, height - padding + 20);
-  });
+    // Рисуем легенду
+}
 
-  // Рисуем линии данных
-  datasets.forEach(dataset => {
+function drawGrid(ctx, padding, chartWidth, chartHeight, maxValue, labelCount) {
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+    ctx.lineWidth = 1;
+
+    // Вертикальные линии
+    for (let i = 0; i < labelCount; i++) {
+        const x = padding + (i * chartWidth / (labelCount - 1));
+        ctx.beginPath();
+        ctx.moveTo(x, padding);
+        ctx.lineTo(x, padding + chartHeight);
+        ctx.stroke();
+    }
+
+    // Горизонтальные линии
+    const gridLines = 5;
+    for (let i = 0; i <= gridLines; i++) {
+        const y = padding + (i * chartHeight / gridLines);
+        ctx.beginPath();
+        ctx.moveTo(padding, y);
+        ctx.lineTo(padding + chartWidth, y);
+        ctx.stroke();
+    }
+}
+
+function drawDataLine(ctx, dataset, padding, stepX, stepY, chartHeight, index) {
+    const { data, color, fillColor } = dataset;
+
+    // Создаем градиент для заливки
+    if (fillColor) {
+        const gradient = ctx.createLinearGradient(0, padding, 0, padding + chartHeight);
+        gradient.addColorStop(0, fillColor);
+        gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+
+        // Рисуем область под линией
+        ctx.beginPath();
+        ctx.moveTo(padding, padding + chartHeight);
+
+        data.forEach((value, i) => {
+            const x = padding + i * stepX;
+            const y = padding + chartHeight - (value * stepY);
+            if (i === 0) ctx.lineTo(x, y);
+            else ctx.lineTo(x, y);
+        });
+
+        ctx.lineTo(padding + (data.length - 1) * stepX, padding + chartHeight);
+        ctx.closePath();
+        ctx.fillStyle = gradient;
+        ctx.fill();
+    }
+
+    // Рисуем линию
     ctx.beginPath();
-    ctx.strokeStyle = dataset.color;
+    ctx.strokeStyle = color;
     ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
 
-    dataset.data.forEach((value, i) => {
-      const x = padding + i * stepX;
-      const y = height - padding - (value * stepY);
+    data.forEach((value, i) => {
+        const x = padding + i * stepX;
+        const y = padding + chartHeight - (value * stepY);
 
-      if (i === 0) {
-        ctx.moveTo(x, y);
-      } else {
-        ctx.lineTo(x, y);
-      }
-
-      // Рисуем точки
-      ctx.fillStyle = dataset.color;
-      ctx.beginPath();
-      ctx.arc(x, y, 4, 0, Math.PI * 2);
-      ctx.fill();
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
     });
 
     ctx.stroke();
-  });
 
-  // Легенда
-  let legendY = 20;
-  datasets.forEach(dataset => {
-    ctx.fillStyle = dataset.color;
-    ctx.fillRect(width - 150, legendY, 12, 12);
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText(dataset.label, width - 130, legendY + 10);
-    legendY += 25;
-  });
+    // Рисуем точки
+    data.forEach((value, i) => {
+        const x = padding + i * stepX;
+        const y = padding + chartHeight - (value * stepY);
+
+        // Внешний круг
+        ctx.beginPath();
+        ctx.arc(x, y, 6, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+
+        // Внутренний круг
+        ctx.beginPath();
+        ctx.arc(x, y, 3, 0, Math.PI * 2);
+        ctx.fillStyle = '#1a1a2e';
+        ctx.fill();
+
+        // Подпись значения
+        ctx.fillStyle = color;
+        ctx.font = 'bold 12px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(value, x, y - 12);
+    });
 }
 
-function drawPieChart(ctx, data) {
-  const canvas = ctx.canvas;
-  const centerX = canvas.width / 2;
-  const centerY = canvas.height / 2;
-  const radius = Math.min(centerX, centerY) - 40;
-
-  // Очищаем canvas
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  // Цвета для сегментов
-  const colors = ['#00ffff', '#00ff00', '#ffff00', '#ff9800', '#ff4444'];
-
-  const total = data.reduce((sum, item) => sum + item.count, 0);
-  if (total === 0) return;
-
-  let startAngle = -Math.PI / 2;
-
-  data.forEach((item, index) => {
-    const sliceAngle = (item.count / total) * 2 * Math.PI;
-
-    // Рисуем сегмент
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, radius, startAngle, startAngle + sliceAngle);
-    ctx.lineTo(centerX, centerY);
-    ctx.fillStyle = colors[index % colors.length];
-    ctx.fill();
-    ctx.strokeStyle = '#1a1a2e';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    // Добавляем подпись
-    const labelAngle = startAngle + sliceAngle / 2;
-    const labelX = centerX + Math.cos(labelAngle) * (radius + 30);
-    const labelY = centerY + Math.sin(labelAngle) * (radius + 30);
-
-    ctx.fillStyle = '#ffffff';
+function drawAxisLabels(ctx, labels, padding, stepX, chartHeight, maxValue, stepY) {
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
     ctx.font = '12px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText(item.status, labelX, labelY);
-    ctx.fillText(`${item.count}`, labelX, labelY + 15);
 
-    startAngle += sliceAngle;
-  });
+    // Подписи X-оси
+    labels.forEach((label, i) => {
+        const x = padding + i * stepX;
+        ctx.fillText(label, x, padding + chartHeight + 20);
+    });
+
+    // Подписи Y-оси
+    ctx.textAlign = 'right';
+    const gridLines = 5;
+    for (let i = 0; i <= gridLines; i++) {
+        const value = Math.round((maxValue / gridLines) * (gridLines - i));
+        const y = padding + (i * chartHeight / gridLines) + 4;
+        ctx.fillText(value, padding - 10, y);
+    }
+}
+
+function drawLegend(ctx, datasets, width, padding) {
+    const legendY = 20;
+    let legendX = width - 200;
+
+    datasets.forEach((dataset, index) => {
+        const y = legendY + index * 25;
+
+        // Цветной квадратик
+        ctx.fillStyle = dataset.color;
+        ctx.fillRect(legendX, y, 15, 15);
+
+        // Подпись
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '14px Arial';
+        ctx.textAlign = 'left';
+        ctx.fillText(dataset.label, legendX + 25, y + 12);
+    });
+}
+
+function drawEnhancedPieChart(ctx, data, width, height) {
+    // Очищаем canvas
+    ctx.clearRect(0, 0, width, height);
+
+    const centerX = width / 2;
+    const centerY = height / 2;
+    const radius = Math.min(centerX, centerY) - 60;
+
+    // Улучшенные цвета для статусов
+    const colors = {
+        'Принята': '#00ffff',
+        'Диагностика': '#0099ff',
+        'Ожидание запчастей': '#ffff00',
+        'В ремонте': '#ff9800',
+        'Тестирование': '#9c27b0',
+        'Готова к выдаче': '#4caf50',
+        'Выдана': '#00ff00'
+    };
+
+    const total = data.reduce((sum, item) => sum + item.count, 0);
+    if (total === 0) return;
+
+    let currentAngle = -Math.PI / 2; // Начинаем сверху
+
+    data.forEach((item, index) => {
+        const sliceAngle = (item.count / total) * 2 * Math.PI;
+        const color = colors[item.status] || `hsl(${index * 60}, 70%, 60%)`;
+
+        // Рисуем сегмент с тенью
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+        ctx.shadowBlur = 10;
+        ctx.shadowOffsetX = 2;
+        ctx.shadowOffsetY = 2;
+
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, radius, currentAngle, currentAngle + sliceAngle);
+        ctx.lineTo(centerX, centerY);
+        ctx.fillStyle = color;
+        ctx.fill();
+
+        // Убираем тень для обводки
+        ctx.shadowColor = 'transparent';
+        ctx.strokeStyle = '#1a1a2e';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
+        // Рисуем подпись на сегменте
+        const labelAngle = currentAngle + sliceAngle / 2;
+        const labelRadius = radius * 0.7;
+        const labelX = centerX + Math.cos(labelAngle) * labelRadius;
+        const labelY = centerY + Math.sin(labelAngle) * labelRadius;
+
+        ctx.fillStyle = '#000';
+        ctx.font = 'bold 14px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(item.count, labelX, labelY + 5);
+
+        // Рисуем линию к подписи
+        // Подпись статуса
+
+        currentAngle += sliceAngle;
+    });
+
+    // Рисуем центральный круг
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, radius * 0.4, 0, Math.PI * 2);
+    ctx.fillStyle = '#1a1a2e';
+    ctx.fill();
+    ctx.strokeStyle = '#00ffff';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    // Общее количество в центре
+    ctx.fillStyle = '#00ffff';
+    ctx.font = 'bold 24px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(total, centerX, centerY - 5);
+    ctx.font = '12px Arial';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+    ctx.fillText('заявок', centerX, centerY + 15);
+}
+
+// Функция для создания анимации появления графиков
+function animateCharts() {
+    const charts = [
+        { id: 'weeklyChart', delay: 0 },
+        { id: 'statusChart', delay: 200 }
+    ];
+
+    charts.forEach(chart => {
+        const canvas = document.getElementById(chart.id);
+        if (canvas) {
+            canvas.style.opacity = '0';
+            canvas.style.transform = 'scale(0.8)';
+            canvas.style.transition = 'all 0.6s ease';
+
+            setTimeout(() => {
+                canvas.style.opacity = '1';
+                canvas.style.transform = 'scale(1)';
+            }, chart.delay);
+        }
+    });
+}
+
+// Обновляем функцию loadCharts
+async function loadCharts() {
+    try {
+        console.log('📈 Загружаем данные для графиков...');
+
+        // Загружаем данные для графиков
+        const [weeklyData, statsData] = await Promise.all([
+            fetch("/dashboard/api/charts/weekly", { credentials: "include" }).then(r => r.json()),
+            fetch("/dashboard/api/stats/detailed", { credentials: "include" }).then(r => r.json())
+        ]);
+
+        console.log('✅ Данные графиков загружены');
+
+        // Создаем графики
+        createWeeklyChart(weeklyData);
+        createStatusChart(statsData.status_stats || []);
+
+        // Анимация появления
+        animateCharts();
+
+    } catch (err) {
+        console.error("❌ Ошибка загрузки данных для графиков:", err);
+        createPlaceholderCharts();
+    }
 }
 
 function createPlaceholderCharts() {

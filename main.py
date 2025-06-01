@@ -386,6 +386,8 @@ async def get_request_full_api(request_id: str, token_data: Dict = Depends(verif
 async def update_request_full_api(request_id: str, update_data: dict,
                                   token_data: Dict = Depends(verify_token_from_cookie)):
     """API для полного обновления заявки"""
+    from datetime import datetime, date
+
     try:
         print(f"🔄 Полное обновление заявки {request_id} пользователем {token_data.get('username')}")
         print(f"📝 Данные для обновления: {update_data}")
@@ -411,7 +413,7 @@ async def update_request_full_api(request_id: str, update_data: dict,
                     detail=f"Недопустимый приоритет. Доступные: {', '.join(valid_priorities)}"
                 )
 
-        # Очищаем пустые значения
+        # Очищаем пустые значения и обрабатываем типы данных
         clean_data = {}
         for key, value in update_data.items():
             if value is not None and value != '':
@@ -426,8 +428,19 @@ async def update_request_full_api(request_id: str, update_data: dict,
                         clean_data[key] = int(value) if value else None
                     except ValueError:
                         continue
+                # 🆕 Специальная обработка для даты estimated_completion
+                elif key == 'estimated_completion' and isinstance(value, str):
+                    try:
+                        # Проверяем, что дата в правильном формате YYYY-MM-DD
+                        datetime.strptime(value, '%Y-%m-%d')
+                        clean_data[key] = value  # Оставляем как строку, обработка в БД
+                    except ValueError:
+                        print(f"❌ Неправильный формат даты: {value}")
+                        continue
                 else:
                     clean_data[key] = value
+
+        print(f"🧹 Очищенные данные: {clean_data}")
 
         # Обновляем заявку
         success = await db.update_repair_request_full(
@@ -448,6 +461,8 @@ async def update_request_full_api(request_id: str, update_data: dict,
         raise
     except Exception as e:
         print(f"❌ Ошибка обновления заявки: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail="Ошибка обновления заявки")
 
 

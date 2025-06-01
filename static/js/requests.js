@@ -6,6 +6,7 @@ let itemsPerPage = 10;
 let sortField = 'date';
 let sortOrder = 'desc';
 let currentEditRequestId = null;
+let currentActiveTab = 'basic';
 
 // Инициализация при загрузке страницы
 document.addEventListener('DOMContentLoaded', async function() {
@@ -25,6 +26,9 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     // Настраиваем обработчики для выхода
     setupLogoutHandlers();
+
+    // Настраиваем обработчики вкладок
+    setupTabHandlers();
 });
 
 // Загрузка информации о пользователе
@@ -77,7 +81,6 @@ async function loadUserInfo() {
     }
 }
 
-
 // Загрузка заявок с использованием существующего API
 async function loadRequests() {
     console.log('📋 Загружаем заявки...');
@@ -114,7 +117,6 @@ async function createRequest(requestData) {
     try {
         console.log('📝 Отправка данных:', requestData);
 
-        // Используем открытый эндпоинт /api/requests для создания заявки
         const response = await fetch('/dashboard/api/requests', {
             method: 'POST',
             credentials: 'include',
@@ -142,14 +144,12 @@ async function createRequest(requestData) {
             await loadRequests(); // Перезагружаем список
             return result;
         } else {
-            // Обрабатываем разные типы ошибок
             let errorMessage = 'Ошибка создания заявки';
 
             if (result.detail) {
                 if (typeof result.detail === 'string') {
                     errorMessage = result.detail;
                 } else if (Array.isArray(result.detail)) {
-                    // Если это массив ошибок валидации от FastAPI
                     errorMessage = result.detail.map(err => err.msg).join(', ');
                 } else if (typeof result.detail === 'object') {
                     errorMessage = JSON.stringify(result.detail);
@@ -167,36 +167,67 @@ async function createRequest(requestData) {
     }
 }
 
-// Обновление статуса заявки через API
-async function updateRequestStatus(requestId, newStatus, comment = '', problemDescription = '') {
+// 🆕 Полное обновление заявки
+async function updateRequestFull(requestId, updateData) {
     try {
-        const response = await fetch(`/dashboard/api/requests/${requestId}/status`, {
+        console.log('🔄 Полное обновление заявки:', requestId, updateData);
+
+        const response = await fetch(`/dashboard/api/requests/${requestId}/full`, {
             method: 'PUT',
             credentials: 'include',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({
-                status: newStatus,
-                comment: comment,
-                problem_description: problemDescription
-            })
+            body: JSON.stringify(updateData)
         });
 
         if (response.ok) {
-            showNotification('Статус и проблема обновлены', 'success');
+            const result = await response.json();
+            showNotification('Заявка успешно обновлена', 'success');
+            console.log('✅ Обновленные поля:', result.updated_fields);
             closeModal('editRequestModal');
             await loadRequests();
+            return true;
         } else {
             const error = await response.json();
             showNotification(error.detail || 'Ошибка обновления', 'error');
+            return false;
         }
     } catch (error) {
         console.error('❌ Ошибка обновления:', error);
         showNotification('Ошибка подключения к серверу', 'error');
+        return false;
     }
 }
 
+// 🆕 Обновление информации о клиенте
+async function updateRequestClient(requestId, clientData) {
+    try {
+        console.log('👤 Обновление клиента для заявки:', requestId, clientData);
+
+        const response = await fetch(`/dashboard/api/requests/${requestId}/client`, {
+            method: 'PUT',
+            credentials: 'include',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(clientData)
+        });
+
+        if (response.ok) {
+            showNotification('Информация о клиенте обновлена', 'success');
+            return true;
+        } else {
+            const error = await response.json();
+            showNotification(error.detail || 'Ошибка обновления клиента', 'error');
+            return false;
+        }
+    } catch (error) {
+        console.error('❌ Ошибка обновления клиента:', error);
+        showNotification('Ошибка подключения к серверу', 'error');
+        return false;
+    }
+}
 
 // Архивирование заявки
 async function archiveRequest(requestId) {
@@ -288,48 +319,106 @@ function setupFormHandlers() {
             }
         });
     }
-}
-    // Форма редактирования заявки
-    // Форма редактирования заявки
-const editRequestForm = document.getElementById('editRequestForm');
-if (editRequestForm) {
-    editRequestForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
 
-        const newStatus = document.getElementById('editStatus').value;
-        const comment = document.getElementById('editComment').value;
-        const masterId = document.getElementById('editMaster').value;
-        const estimatedCost = document.getElementById('editEstimatedCost')?.value;
-        const updatedProblem = document.getElementById('editProblemDescription').value.trim(); // 🆕
+    // 🆕 Обновленная форма редактирования заявки
+    const editRequestForm = document.getElementById('editRequestForm');
+    if (editRequestForm) {
+        editRequestForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
 
-        const submitButton = e.target.querySelector('button[type="submit"]');
-        const originalText = submitButton.textContent;
-        submitButton.disabled = true;
-        submitButton.textContent = 'Сохранение...';
+            const submitButton = e.target.querySelector('button[type="submit"]');
+            const originalText = submitButton.textContent;
+            submitButton.disabled = true;
+            submitButton.textContent = 'Сохранение...';
 
-        try {
-            await updateRequestStatus(currentEditRequestId, newStatus, comment, updatedProblem); // 🆕
+            try {
+                // Собираем данные со всех вкладок
+                const updateData = {};
+                const clientData = {};
 
-            if (masterId !== undefined) {
-                await updateMasterAssignment(currentEditRequestId, masterId);
+                // Основная информация
+                const status = document.getElementById('editStatus').value;
+                const priority = document.getElementById('editPriority').value;
+                const comment = document.getElementById('editComment').value.trim();
+
+                if (status) updateData.status = status;
+                if (priority) updateData.priority = priority;
+                if (comment) updateData.comment = comment;
+
+                // Информация о клиенте
+                const clientName = document.getElementById('editClientName')?.value.trim();
+                const clientPhone = document.getElementById('editClientPhone')?.value.trim();
+                const clientEmail = document.getElementById('editClientEmail')?.value.trim();
+                const clientAddress = document.getElementById('editClientAddress')?.value.trim();
+
+                if (clientName) clientData.full_name = clientName;
+                if (clientPhone) clientData.phone = clientPhone;
+                if (clientEmail) clientData.email = clientEmail;
+                if (clientAddress) clientData.address = clientAddress;
+
+                // Информация об устройстве
+                const deviceType = document.getElementById('editDeviceType')?.value;
+                const brand = document.getElementById('editBrand')?.value.trim();
+                const model = document.getElementById('editModel')?.value.trim();
+                const serialNumber = document.getElementById('editSerialNumber')?.value.trim();
+                const problemDescription = document.getElementById('editProblemDescription')?.value.trim();
+                const partsUsed = document.getElementById('editPartsUsed')?.value.trim();
+
+                if (deviceType) updateData.device_type = deviceType;
+                if (brand) updateData.brand = brand;
+                if (model) updateData.model = model;
+                if (serialNumber) updateData.serial_number = serialNumber;
+                if (problemDescription) updateData.problem_description = problemDescription;
+                if (partsUsed) updateData.parts_used = partsUsed;
+
+                // Финансовая информация
+                const estimatedCost = document.getElementById('editEstimatedCost')?.value;
+                const finalCost = document.getElementById('editFinalCost')?.value;
+                const repairDuration = document.getElementById('editRepairDuration')?.value;
+                const warrantyPeriod = document.getElementById('editWarrantyPeriod')?.value;
+                const estimatedCompletion = document.getElementById('editEstimatedCompletion')?.value;
+
+                if (estimatedCost) updateData.estimated_cost = parseFloat(estimatedCost);
+                if (finalCost) updateData.final_cost = parseFloat(finalCost);
+                if (repairDuration) updateData.repair_duration_hours = parseFloat(repairDuration);
+                if (warrantyPeriod) updateData.warranty_period = parseInt(warrantyPeriod);
+                if (estimatedCompletion) updateData.estimated_completion = estimatedCompletion;
+
+                // Заметки
+                const notes = document.getElementById('editNotes')?.value.trim();
+                if (notes) updateData.notes = notes;
+
+                console.log('📝 Данные для обновления:', updateData);
+                console.log('👤 Данные клиента:', clientData);
+
+                // Сначала обновляем заявку
+                let success = true;
+                if (Object.keys(updateData).length > 0) {
+                    success = await updateRequestFull(currentEditRequestId, updateData);
+                }
+
+                // Затем обновляем клиента, если есть изменения
+                if (success && Object.keys(clientData).length > 0) {
+                    await updateRequestClient(currentEditRequestId, clientData);
+                }
+
+                // Если есть изменения в назначении мастера
+                const masterId = document.getElementById('editMaster')?.value;
+                if (masterId !== undefined) {
+                    await updateMasterAssignment(currentEditRequestId, masterId);
+                }
+
+            } finally {
+                submitButton.disabled = false;
+                submitButton.textContent = originalText;
             }
-
-            if (estimatedCost) {
-                await updateEstimatedCost(currentEditRequestId, estimatedCost);
-            }
-
-        } finally {
-            submitButton.disabled = false;
-            submitButton.textContent = originalText;
-        }
-    });
+        });
+    }
 }
-
 
 // Обновление назначения мастера
 async function updateMasterAssignment(requestId, masterId) {
     try {
-
         if (masterId) {
             // Назначаем мастера
             await fetch(`/dashboard/api/requests/${requestId}/assign-master`, {
@@ -563,51 +652,241 @@ function openNewRequestModal() {
     openModal('newRequestModal');
 }
 
-// Открытие модального окна редактирования
-
-// Открытие модального окна редактирования
+// 🆕 Обновленное открытие модального окна редактирования
 async function openEditModal(requestId) {
-    const request = allRequests.find(r => r.request_id === requestId);
-    if (!request) return;
+    try {
+        console.log('📝 Открываем редактирование заявки:', requestId);
 
-    currentEditRequestId = requestId;
+        currentEditRequestId = requestId;
 
-    // Заполняем информацию о заявке
-    document.getElementById('editRequestId').textContent = `#${request.request_id}`;
-    document.getElementById('editCreatedAt').textContent = formatDate(request.created_at);
-    document.getElementById('editClientInfo').textContent = `${request.client_name} (${request.client_phone})`;
-    document.getElementById('editDeviceInfo').textContent = `${request.device_type} ${request.brand || ''} ${request.model || ''}`;
-    document.getElementById('editProblemDescription').value = request.problem_description;
-    document.getElementById('editStatus').value = request.status;
-    document.getElementById('editPriority').value = request.priority || 'Обычная';
+        // Загружаем полные данные заявки
+        const response = await fetch(`/dashboard/api/requests/${requestId}/full`, {
+            credentials: 'include'
+        });
 
-    // Загружаем список мастеров
-    await loadMasters();
+        if (!response.ok) {
+            showNotification('Ошибка загрузки данных заявки', 'error');
+            return;
+        }
 
-    // Устанавливаем текущего мастера
-    const masterSelect = document.getElementById('editMaster');
-    if (masterSelect && request.assigned_master_id) {
-        masterSelect.value = request.assigned_master_id;
+        const request = await response.json();
+        console.log('✅ Данные заявки загружены:', request);
+
+        // Заполняем основную информацию
+        document.getElementById('editRequestId').textContent = `#${request.request_id}`;
+        document.getElementById('editCreatedAt').textContent = formatDate(request.created_at);
+
+        // Заполняем информацию о клиенте
+        const editClientName = document.getElementById('editClientName');
+        const editClientPhone = document.getElementById('editClientPhone');
+        const editClientEmail = document.getElementById('editClientEmail');
+        const editClientAddress = document.getElementById('editClientAddress');
+
+        if (editClientName) editClientName.value = request.client_name || '';
+        if (editClientPhone) editClientPhone.value = request.client_phone || '';
+        if (editClientEmail) editClientEmail.value = request.client_email || '';
+        if (editClientAddress) editClientAddress.value = request.client_address || '';
+
+        // Заполняем информацию об устройстве
+        const editDeviceType = document.getElementById('editDeviceType');
+        const editBrand = document.getElementById('editBrand');
+        const editModel = document.getElementById('editModel');
+        const editSerialNumber = document.getElementById('editSerialNumber');
+        const editProblemDescription = document.getElementById('editProblemDescription');
+        const editPartsUsed = document.getElementById('editPartsUsed');
+
+        if (editDeviceType) editDeviceType.value = request.device_type || '';
+        if (editBrand) editBrand.value = request.brand || '';
+        if (editModel) editModel.value = request.model || '';
+        if (editSerialNumber) editSerialNumber.value = request.serial_number || '';
+        if (editProblemDescription) editProblemDescription.value = request.problem_description || '';
+        if (editPartsUsed) editPartsUsed.value = request.parts_used || '';
+
+        // Заполняем статус и приоритет
+        document.getElementById('editStatus').value = request.status || 'Принята';
+        document.getElementById('editPriority').value = request.priority || 'Обычная';
+
+        // Заполняем финансовую информацию
+        const editEstimatedCost = document.getElementById('editEstimatedCost');
+        const editFinalCost = document.getElementById('editFinalCost');
+        const editRepairDuration = document.getElementById('editRepairDuration');
+        const editWarrantyPeriod = document.getElementById('editWarrantyPeriod');
+        const editEstimatedCompletion = document.getElementById('editEstimatedCompletion');
+
+        if (editEstimatedCost) editEstimatedCost.value = request.estimated_cost || '';
+        if (editFinalCost) editFinalCost.value = request.final_cost || '';
+        if (editRepairDuration) editRepairDuration.value = request.repair_duration_hours || '';
+        if (editWarrantyPeriod) editWarrantyPeriod.value = request.warranty_period || 30;
+        if (editEstimatedCompletion && request.estimated_completion) {
+            const date = new Date(request.estimated_completion);
+            editEstimatedCompletion.value = date.toISOString().split('T')[0];
+        }
+
+        // Заполняем заметки
+        const editNotes = document.getElementById('editNotes');
+        if (editNotes) editNotes.value = request.notes || '';
+
+        // Сбрасываем комментарий
+        const editComment = document.getElementById('editComment');
+        if (editComment) editComment.value = '';
+
+        // Загружаем список мастеров
+        await loadMasters();
+
+        // Устанавливаем текущего мастера
+        const masterSelect = document.getElementById('editMaster');
+        if (masterSelect && request.assigned_master_id) {
+            masterSelect.value = request.assigned_master_id;
+        }
+
+        // Загружаем историю изменений
+        await loadRequestHistory(requestId);
+
+        // Переключаемся на первую вкладку
+        switchTab('basic');
+
+        // Открываем модальное окно
+        openModal('editRequestModal');
+
+    } catch (error) {
+        console.error('❌ Ошибка открытия редактирования:', error);
+        showNotification('Ошибка загрузки данных заявки', 'error');
+    }
+}
+
+// 🆕 Загрузка истории изменений заявки
+async function loadRequestHistory(requestId) {
+    try {
+        const response = await fetch(`/dashboard/api/requests/${requestId}/history`, {
+            credentials: 'include'
+        });
+
+        if (response.ok) {
+            const history = await response.json();
+            renderRequestHistory(history);
+        } else {
+            console.log('⚠️ Не удалось загрузить историю изменений');
+            renderRequestHistory([]);
+        }
+    } catch (error) {
+        console.error('❌ Ошибка загрузки истории:', error);
+        renderRequestHistory([]);
+    }
+}
+
+// 🆕 Отображение истории изменений
+// 🆕 Обновленное отображение истории изменений с назначениями мастеров
+function renderRequestHistory(history) {
+    const historyContainer = document.getElementById('editHistory');
+    if (!historyContainer) return;
+
+    if (!history.length) {
+        historyContainer.innerHTML = `
+            <div style="text-align: center; color: rgba(255,255,255,0.6); padding: 1rem;">
+                История изменений пуста
+            </div>
+        `;
+        return;
     }
 
-    // Сбрасываем комментарий
-    document.getElementById('editComment').value = '';
+    historyContainer.innerHTML = history.map(item => {
+        const date = new Date(item.changed_at).toLocaleString('ru-RU');
+        const roleName = {
+            'admin': 'Администратор',
+            'director': 'Директор',
+            'manager': 'Менеджер',
+            'master': 'Мастер'
+        }[item.changed_by_role] || item.changed_by_role;
 
-    openModal('editRequestModal');
+        // Определяем тип события и соответствующие стили
+        let icon, title, borderColor, bgColor;
+
+        switch (item.action_type) {
+            case 'status_change':
+                icon = '📋';
+                title = `${item.old_status || 'Создание'} → ${item.new_status}`;
+                borderColor = '#00ffff';
+                bgColor = 'rgba(0, 255, 255, 0.03)';
+                break;
+            case 'master_assignment':
+                icon = '👤';
+                title = `Назначен мастер: ${item.master_name}`;
+                borderColor = '#00ff00';
+                bgColor = 'rgba(0, 255, 0, 0.03)';
+                break;
+            case 'master_unassignment':
+                icon = '❌';
+                title = `Снят мастер: ${item.master_name}`;
+                borderColor = '#ff9800';
+                bgColor = 'rgba(255, 152, 0, 0.03)';
+                break;
+            default:
+                icon = '📝';
+                title = 'Изменение';
+                borderColor = '#00ffff';
+                bgColor = 'rgba(0, 255, 255, 0.03)';
+        }
+
+        return `
+            <div style="padding: 0.75rem; background: ${bgColor};
+                        border-left: 3px solid ${borderColor}; margin-bottom: 0.5rem;
+                        border-radius: 0 8px 8px 0; transition: all 0.3s ease;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        <span style="font-size: 1.2rem;">${icon}</span>
+                        <div style="font-weight: 600; color: ${borderColor};">
+                            ${title}
+                        </div>
+                    </div>
+                    <div style="font-size: 0.85rem; color: rgba(255,255,255,0.6);">
+                        ${date}
+                    </div>
+                </div>
+                <div style="font-size: 0.9rem; color: rgba(255,255,255,0.8); margin-left: 1.7rem;">
+                    <strong>${item.changed_by_name || 'Система'}</strong> (${roleName})
+                </div>
+                ${item.comment && item.action_type === 'status_change' ? `
+                    <div style="margin-top: 0.5rem; margin-left: 1.7rem; padding: 0.5rem;
+                                background: rgba(255,255,255,0.05); border-radius: 4px;
+                                font-size: 0.9rem; color: rgba(255,255,255,0.9);">
+                        💬 ${item.comment}
+                    </div>
+                ` : ''}
+                ${item.master_specialization && item.action_type === 'master_assignment' ? `
+                    <div style="margin-top: 0.25rem; margin-left: 1.7rem;
+                                font-size: 0.85rem; color: rgba(255,255,255,0.7);">
+                        🔧 Специализация: ${item.master_specialization}
+                    </div>
+                ` : ''}
+            </div>
+        `;
+    }).join('');
+
+    // Добавляем анимацию появления
+    const historyItems = historyContainer.querySelectorAll('div[style*="border-left"]');
+    historyItems.forEach((item, index) => {
+        item.style.opacity = '0';
+        item.style.transform = 'translateX(-20px)';
+        setTimeout(() => {
+            item.style.transition = 'all 0.3s ease';
+            item.style.opacity = '1';
+            item.style.transform = 'translateX(0)';
+        }, index * 100);
+    });
+
+    console.log('✅ История изменений отображена');
 }
 
 async function loadMasters() {
     try {
         console.log('🔄 Загружаем мастеров...');
-        const token = localStorage.getItem('access_token');
         const response = await fetch('/dashboard/api/masters/available', {
             credentials: 'include'
         });
-        console.log('📡 Ответ API:', response.status);
+
         if (response.ok) {
             const masters = await response.json();
             const masterSelect = document.getElementById('editMaster');
-            console.log('🎯 Select элемент:', masterSelect);
 
             if (masterSelect) {
                 masterSelect.innerHTML = '<option value="">Не назначен</option>';
@@ -636,6 +915,39 @@ async function loadMasters() {
         console.error('❌ Ошибка загрузки мастеров:', error);
     }
 }
+
+// 🆕 Настройка обработчиков вкладок
+function setupTabHandlers() {
+    // Добавляем глобальную функцию для переключения вкладок
+    window.switchTab = function(tabName) {
+        // Скрываем все вкладки
+        document.querySelectorAll('.tab-content').forEach(content => {
+            content.classList.remove('active');
+        });
+
+        // Убираем активный класс со всех кнопок
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.classList.remove('active');
+        });
+
+        // Показываем нужную вкладку
+        const targetContent = document.getElementById(tabName + 'Tab');
+        if (targetContent) {
+            targetContent.classList.add('active');
+        }
+
+        // Активируем соответствующую кнопку
+        const targetTab = Array.from(document.querySelectorAll('.tab')).find(tab =>
+            tab.getAttribute('onclick') && tab.getAttribute('onclick').includes(tabName)
+        );
+        if (targetTab) {
+            targetTab.classList.add('active');
+        }
+
+        currentActiveTab = tabName;
+    };
+}
+
 // Вспомогательные функции
 function getStatusClass(status) {
     const statusMap = {
@@ -714,6 +1026,7 @@ function showNotification(message, type = 'success') {
         animation: slideInRight 0.4s ease-out;
         max-width: 400px;
         word-wrap: break-word;
+        backdrop-filter: blur(10px);
     `;
     notification.textContent = message;
 
@@ -728,7 +1041,7 @@ function showNotification(message, type = 'success') {
 // Экспорт заявок
 function exportRequests() {
     const csvContent = [
-        ['ID', 'Клиент', 'Телефон', 'Устройство', 'Проблема', 'Статус', 'Приоритет', 'Дата'],
+        ['ID', 'Клиент', 'Телефон', 'Устройство', 'Проблема', 'Статус', 'Приоритет', 'Мастер', 'Дата'],
         ...filteredRequests.map(r => [
             r.request_id,
             r.client_name,
@@ -737,6 +1050,7 @@ function exportRequests() {
             r.problem_description,
             r.status,
             r.priority || 'Обычная',
+            r.master_name || '-',
             formatDate(r.created_at)
         ])
     ].map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
@@ -777,4 +1091,31 @@ window.onclick = function(event) {
     }
 }
 
-console.log('✅ Скрипт управления заявками загружен');
+// Добавим стили для анимации уведомлений
+const style = document.createElement('style');
+style.textContent = `
+    @keyframes slideInRight {
+        from {
+            transform: translateX(100%);
+            opacity: 0;
+        }
+        to {
+            transform: translateX(0);
+            opacity: 1;
+        }
+    }
+
+    @keyframes slideOutRight {
+        from {
+            transform: translateX(0);
+            opacity: 1;
+        }
+        to {
+            transform: translateX(100%);
+            opacity: 0;
+        }
+    }
+`;
+document.head.appendChild(style);
+
+console.log('✅ Обновленный скрипт управления заявками с полным редактированием загружен');

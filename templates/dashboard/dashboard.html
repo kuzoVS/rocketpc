@@ -110,28 +110,59 @@
 
             <!-- Графики и статистика -->
             <div class="charts-section fade-in">
-                <div class="chart-card">
-                    <div class="chart-header">
-                        <h3 class="chart-title">Статистика заявок за неделю</h3>
-                        <div style="display: flex; gap: 1rem;">
-                            <button class="btn btn-outline btn-sm" onclick="loadWeeklyChart()">Неделя</button>
-                            <button class="btn btn-outline btn-sm" onclick="loadMonthlyChart()">Месяц</button>
-                        </div>
-                    </div>
-                    <div class="chart-placeholder">
-                        <canvas id="weeklyChart" width="400" height="300"></canvas>
+            <div class="chart-card animated">
+                <div class="chart-header">
+                    <h3 class="chart-title">Статистика заявок за неделю</h3>
+                    <div class="chart-controls">
+                        <button class="btn-chart-toggle active" onclick="loadWeeklyChart(); setActiveButton(this)">
+                            📊 Неделя
+                        </button>
+                        <button class="btn-chart-toggle" onclick="loadMonthlyChart(); setActiveButton(this)">
+                            📈 Месяц
+                        </button>
                     </div>
                 </div>
-
-                <div class="chart-card">
-                    <div class="chart-header">
-                        <h3 class="chart-title">Распределение по статусам</h3>
+                <div class="chart-placeholder">
+                    <canvas id="weeklyChart" width="600" height="300"></canvas>
+                    <div class="chart-loading" id="weeklyChartLoading" style="display: none;">
+                        <div class="chart-loading-spinner"></div>
+                        <div class="chart-loading-text">Загрузка данных...</div>
                     </div>
-                    <div class="chart-placeholder">
-                        <canvas id="statusChart" width="300" height="300"></canvas>
+                </div>
+                <div class="chart-legend">
+                    <div class="legend-item">
+                        <div class="legend-color" style="background: linear-gradient(45deg, #00ffff, #0099ff);"></div>
+                        <span>Новые заявки</span>
+                    </div>
+                    <div class="legend-item">
+                        <div class="legend-color" style="background: linear-gradient(45deg, #00ff00, #4caf50);"></div>
+                        <span>Выполнено</span>
                     </div>
                 </div>
             </div>
+
+            <div class="chart-card animated">
+                <div class="chart-header">
+                    <h3 class="chart-title">Распределение по статусам</h3>
+                    <div class="chart-controls">
+                        <button class="btn-chart-toggle active">
+                            🥧 Круговая
+                        </button>
+                    </div>
+                </div>
+                <div class="chart-placeholder">
+                    <canvas id="statusChart" width="350" height="250"></canvas>
+                    <div class="chart-loading" id="statusChartLoading" style="display: none;">
+                        <div class="chart-loading-spinner"></div>
+                        <div class="chart-loading-text">Анализ статусов...</div>
+                    </div>
+                </div>
+                <!-- Легенда снизу для круговой диаграммы -->
+                <div class="pie-chart-legend" id="pieChartLegend">
+                    <!-- Будет заполнена через JavaScript -->
+                </div>
+            </div>
+        </div>
 
             <!-- Дополнительные секции -->
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 3rem;">

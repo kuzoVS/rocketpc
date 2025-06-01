@@ -288,7 +288,7 @@ class PostgreSQLDatabase:
             return [dict(skill) for skill in skills]
 
     async def assign_master_to_request(self, request_id: str, master_id: int, assigned_by_id: int) -> bool:
-        """Назначение мастера на заявку"""
+        """Назначение мастера на заявку с улучшенной историей"""
         async with self.pool.acquire() as conn:
             try:
                 # Проверяем существование заявки
@@ -301,13 +301,21 @@ class PostgreSQLDatabase:
                 if not request:
                     return False
 
-                # Если был назначен другой мастер, записываем в историю
-                if request['assigned_master_id']:
+                # Если был назначен другой мастер, сначала снимаем его
+                if request['assigned_master_id'] and request['assigned_master_id'] != master_id:
                     await conn.execute('''
                         UPDATE assignment_history 
-                        SET unassigned_at = CURRENT_TIMESTAMP
+                        SET unassigned_at = CURRENT_TIMESTAMP,
+                            reason = 'Переназначение на другого мастера'
                         WHERE request_id = $1 AND unassigned_at IS NULL
                     ''', request['id'])
+
+                    # Обновляем счетчик у предыдущего мастера
+                    await conn.execute('''
+                        UPDATE users 
+                        SET current_repairs_count = GREATEST(current_repairs_count - 1, 0)
+                        WHERE id = $1
+                    ''', request['assigned_master_id'])
 
                 # Назначаем нового мастера
                 await conn.execute('''
@@ -321,11 +329,11 @@ class PostgreSQLDatabase:
 
                 # Добавляем запись в историю назначений
                 await conn.execute('''
-                    INSERT INTO assignment_history (request_id, master_id, assigned_by)
-                    VALUES ($1, $2, $3)
+                    INSERT INTO assignment_history (request_id, master_id, assigned_by, assigned_at)
+                    VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
                 ''', request['id'], master_id, assigned_by_id)
 
-                # Обновляем счетчик активных ремонтов у мастера
+                # Обновляем счетчик активных ремонтов у нового мастера
                 await conn.execute('''
                     UPDATE users 
                     SET current_repairs_count = (
@@ -345,7 +353,7 @@ class PostgreSQLDatabase:
                 return False
 
     async def unassign_master_from_request(self, request_id: str, reason: str = None) -> bool:
-        """Снятие мастера с заявки"""
+        """Снятие мастера с заявки с улучшенной историей"""
         async with self.pool.acquire() as conn:
             try:
                 # Получаем информацию о заявке
@@ -375,13 +383,13 @@ class PostgreSQLDatabase:
                     SET unassigned_at = CURRENT_TIMESTAMP,
                         reason = $1
                     WHERE request_id = $2 AND unassigned_at IS NULL
-                ''', reason, request['id'])
+                ''', reason or 'Мастер снят с заявки', request['id'])
 
                 # Обновляем счетчик активных ремонтов у мастера
                 await conn.execute('''
                     UPDATE users 
-                    SET current_repairs_count = current_repairs_count - 1
-                    WHERE id = $1 AND current_repairs_count > 0
+                    SET current_repairs_count = GREATEST(current_repairs_count - 1, 0)
+                    WHERE id = $1
                 ''', old_master_id)
 
                 return True
@@ -389,6 +397,7 @@ class PostgreSQLDatabase:
             except Exception as e:
                 print(f"Ошибка снятия мастера: {e}")
                 return False
+
 
     async def get_master_workload(self, master_id: int) -> Dict:
         """Получение загруженности мастера"""
@@ -912,6 +921,8 @@ class PostgreSQLDatabase:
 
     async def update_repair_request_full(self, request_id: str, update_data: dict, user_id: int) -> bool:
         """Полное обновление заявки на ремонт"""
+        from datetime import datetime, date
+
         async with self.pool.acquire() as conn:
             try:
                 # Получаем текущие данные заявки
@@ -948,8 +959,19 @@ class PostgreSQLDatabase:
                 # Обрабатываем каждое поле
                 for field_name, db_field in updatable_fields.items():
                     if field_name in update_data and update_data[field_name] is not None:
+                        value = update_data[field_name]
+
+                        # 🆕 Специальная обработка для дат
+                        if field_name == 'estimated_completion' and isinstance(value, str):
+                            try:
+                                # Конвертируем строку вида '2025-06-02' в объект date
+                                value = datetime.strptime(value, '%Y-%m-%d').date()
+                            except ValueError as e:
+                                print(f"❌ Ошибка парсинга даты: {value}, ошибка: {e}")
+                                continue
+
                         set_clauses.append(f"{db_field} = ${param_count}")
-                        values.append(update_data[field_name])
+                        values.append(value)
                         param_count += 1
 
                 # Автоматическое заполнение actual_completion при статусе "Выдана"
@@ -975,6 +997,9 @@ class PostgreSQLDatabase:
                 '''
                 values.append(request_id)
 
+                print(f"🔍 SQL запрос: {query}")
+                print(f"🔍 Значения: {values}")
+
                 await conn.execute(query, *values)
 
                 # Записываем изменения в историю если изменился статус
@@ -997,6 +1022,8 @@ class PostgreSQLDatabase:
 
             except Exception as e:
                 print(f"❌ Ошибка обновления заявки: {e}")
+                import traceback
+                traceback.print_exc()
                 return False
 
     async def get_repair_request_full(self, request_id: str) -> Optional[Dict]:
@@ -1010,6 +1037,7 @@ class PostgreSQLDatabase:
                     c.email as client_email,
                     c.address as client_address,
                     c.is_vip as client_is_vip,
+                    c.id as client_id,
                     master.full_name as master_name,
                     master.phone as master_phone,
                     master.specialization as master_specialization,
@@ -1023,25 +1051,115 @@ class PostgreSQLDatabase:
                 WHERE rr.request_id = $1 AND rr.is_archived = FALSE
             ''', request_id)
 
-            return dict(request) if request else None
+            if request:
+                result = dict(request)
+                # Форматируем даты для JSON
+                if result.get('estimated_completion'):
+                    result['estimated_completion'] = result['estimated_completion'].isoformat()
+                if result.get('actual_completion'):
+                    result['actual_completion'] = result['actual_completion'].isoformat()
+                if result.get('created_at'):
+                    result['created_at'] = result['created_at'].isoformat()
+                if result.get('updated_at'):
+                    result['updated_at'] = result['updated_at'].isoformat()
+
+                return result
+            return None
 
     async def get_status_history(self, request_id: str) -> List[Dict]:
-        """Получение истории изменений статуса заявки"""
+        """Получение истории изменений статуса заявки и назначений мастеров"""
         async with self.pool.acquire() as conn:
-            history = await conn.fetch('''
+            # Получаем ID заявки
+            request_row = await conn.fetchrow('SELECT id FROM repair_requests WHERE request_id = $1', request_id)
+            if not request_row:
+                return []
+
+            internal_id = request_row['id']
+
+            # Получаем историю изменений статусов
+            status_history = await conn.fetch('''
                 SELECT 
-                    sh.*,
+                    sh.id,
+                    sh.old_status,
+                    sh.new_status,
+                    sh.changed_at,
+                    sh.comment,
                     u.full_name as changed_by_name,
-                    u.role as changed_by_role
+                    u.role as changed_by_role,
+                    'status_change' as action_type
                 FROM status_history sh
                 LEFT JOIN users u ON sh.changed_by = u.id
-                WHERE sh.request_id = (
-                    SELECT id FROM repair_requests WHERE request_id = $1
-                )
+                WHERE sh.request_id = $1
                 ORDER BY sh.changed_at DESC
-            ''', request_id)
+            ''', internal_id)
 
-            return [dict(record) for record in history]
+            # Получаем историю назначений мастеров
+            assignment_history = await conn.fetch('''
+                SELECT 
+                    ah.id,
+                    ah.assigned_at as changed_at,
+                    ah.unassigned_at,
+                    ah.reason as comment,
+                    master.full_name as master_name,
+                    master.specialization as master_specialization,
+                    assigned_by.full_name as changed_by_name,
+                    assigned_by.role as changed_by_role,
+                    'master_assignment' as action_type
+                FROM assignment_history ah
+                LEFT JOIN users master ON ah.master_id = master.id
+                LEFT JOIN users assigned_by ON ah.assigned_by = assigned_by.id
+                WHERE ah.request_id = $1
+                ORDER BY ah.assigned_at DESC
+            ''', internal_id)
+
+            # Объединяем и сортируем все события
+            all_events = []
+
+            # Добавляем изменения статусов
+            for record in status_history:
+                all_events.append({
+                    'id': f"status_{record['id']}",
+                    'action_type': 'status_change',
+                    'old_status': record['old_status'],
+                    'new_status': record['new_status'],
+                    'changed_at': record['changed_at'],
+                    'changed_by_name': record['changed_by_name'],
+                    'changed_by_role': record['changed_by_role'],
+                    'comment': record['comment']
+                })
+
+            # Добавляем назначения мастеров
+            for record in assignment_history:
+                # Событие назначения
+                all_events.append({
+                    'id': f"assign_{record['id']}",
+                    'action_type': 'master_assignment',
+                    'master_name': record['master_name'],
+                    'master_specialization': record['master_specialization'],
+                    'changed_at': record['changed_at'],
+                    'changed_by_name': record['changed_by_name'],
+                    'changed_by_role': record['changed_by_role'],
+                    'comment': f"Назначен мастер: {record['master_name']}" + (
+                        f" ({record['master_specialization']})" if record['master_specialization'] else "")
+                })
+
+                # Событие снятия мастера (если есть)
+                if record['unassigned_at']:
+                    all_events.append({
+                        'id': f"unassign_{record['id']}",
+                        'action_type': 'master_unassignment',
+                        'master_name': record['master_name'],
+                        'changed_at': record['unassigned_at'],
+                        'changed_by_name': record['changed_by_name'],
+                        'changed_by_role': record['changed_by_role'],
+                        'comment': f"Снят мастер: {record['master_name']}" + (
+                            f" - {record['comment']}" if record['comment'] else "")
+                    })
+
+            # Сортируем по времени (новые сверху)
+            all_events.sort(key=lambda x: x['changed_at'], reverse=True)
+
+            return all_events
 
     async def update_client_info(self, client_id: int, client_data: dict) -> bool:
         """Обновление информации о клиенте"""
