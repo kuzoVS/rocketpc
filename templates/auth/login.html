@@ -20,10 +20,11 @@
             <p class="subtitle">Панель управления</p>
         </div>
 
-        <div id="errorMessage" class="error-message"></div>
-        <div id="successMessage" class="success-message"></div>
+        {% if error %}
+            <div class="error-message">{{ error }}</div>
+        {% endif %}
 
-        <form id="loginForm">
+        <form method="post" action="/auth/login">
             <div class="form-group">
                 <label for="username">Имя пользователя</label>
                 <div class="input-wrapper">
@@ -36,16 +37,10 @@
                 <label for="password">Пароль</label>
                 <div class="input-wrapper">
                     <input type="password" id="password" name="password" required autocomplete="current-password">
-                    <button type="button" class="password-toggle" onclick="togglePassword()">
-                        <span id="toggleIcon">👁️</span>
-                    </button>
                 </div>
             </div>
 
-            <button type="submit" class="btn-login">
-                <span id="btnText">Войти в систему</span>
-                <div class="loading" id="loading"></div>
-            </button>
+            <button type="submit" class="btn-login">Войти в систему</button>
         </form>
 
         <div class="footer-text">
@@ -53,7 +48,5 @@
             <p style="margin-top: 10px;">© 2025 ROCKET PC</p>
         </div>
     </div>
-
-    <script src="{{ url_for('static', path='/js/login.js') }}"></script>
 </body>
 </html>

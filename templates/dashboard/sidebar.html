@@ -1,0 +1,58 @@
+<aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+        <div class="logo">🚀</div>
+        <h2>ROCKET PC</h2>
+    </div>
+    <nav>
+        <ul class="nav-menu">
+            <li class="nav-item">
+                <a href="/dashboard" class="nav-link {% if page == 'dashboard' %}active{% endif %}">
+                    <span class="nav-icon">📊</span>
+                    <span>Главная</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="/dashboard/requests" class="nav-link {% if page == 'requests' %}active{% endif %}">
+                    <span class="nav-icon">📝</span>
+                    <span>Заявки</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="/dashboard/clients" class="nav-link {% if page == 'clients' %}active{% endif %}">
+                    <span class="nav-icon">👥</span>
+                    <span>Клиенты</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="/dashboard/inventory" class="nav-link {% if page == 'inventory' %}active{% endif %}">
+                    <span class="nav-icon">📦</span>
+                    <span>Склад</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="/dashboard/statistics" class="nav-link {% if page == 'statistics' %}active{% endif %}">
+                    <span class="nav-icon">📈</span>
+                    <span>Статистика</span>
+                </a>
+            </li>
+            <li class="nav-item" id="usersMenuItem" style="display: none;">
+                <a href="/dashboard/users" class="nav-link {% if page == 'users' %}active{% endif %}">
+                    <span class="nav-icon">👤</span>
+                    <span>Пользователи</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="/dashboard/settings" class="nav-link {% if page == 'settings' %}active{% endif %}">
+                    <span class="nav-icon">⚙️</span>
+                    <span>Настройки</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a href="#logout" class="nav-link" onclick="logout()">
+                    <span class="nav-icon">🚪</span>
+                    <span>Выход</span>
+                </a>
+            </li>
+        </ul>
+    </nav>
+</aside>

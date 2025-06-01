@@ -278,30 +278,71 @@ function setupFormHandlers() {
             }
         });
     }
-
+}
     // Форма редактирования заявки
-    const editRequestForm = document.getElementById('editRequestForm');
-    if (editRequestForm) {
-        editRequestForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
+    // Форма редактирования заявки
+const editRequestForm = document.getElementById('editRequestForm');
+if (editRequestForm) {
+    editRequestForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
 
-            const newStatus = document.getElementById('editStatus').value;
-            const comment = document.getElementById('editComment').value;
+        const newStatus = document.getElementById('editStatus').value;
+        const comment = document.getElementById('editComment').value;
+        const masterId = document.getElementById('editMaster').value; // Добавить
+        const estimatedCost = document.getElementById('editEstimatedCost').value; // Добавить
 
-            // Показываем индикатор загрузки
-            const submitButton = e.target.querySelector('button[type="submit"]');
-            const originalText = submitButton.textContent;
-            submitButton.disabled = true;
-            submitButton.textContent = 'Сохранение...';
+        // Показываем индикатор загрузки
+        const submitButton = e.target.querySelector('button[type="submit"]');
+        const originalText = submitButton.textContent;
+        submitButton.disabled = true;
+        submitButton.textContent = 'Сохранение...';
 
-            try {
-                await updateRequestStatus(currentEditRequestId, newStatus, comment);
-            } finally {
-                // Восстанавливаем кнопку
-                submitButton.disabled = false;
-                submitButton.textContent = originalText;
+        try {
+            // Обновляем статус
+            await updateRequestStatus(currentEditRequestId, newStatus, comment);
+
+            // Если изменился мастер, обновляем назначение
+            if (masterId !== undefined) {
+                await updateMasterAssignment(currentEditRequestId, masterId);
             }
-        });
+
+            // Если изменилась стоимость, обновляем её
+            if (estimatedCost) {
+                await updateEstimatedCost(currentEditRequestId, estimatedCost);
+            }
+
+        } finally {
+            // Восстанавливаем кнопку
+            submitButton.disabled = false;
+            submitButton.textContent = originalText;
+        }
+    });
+}
+
+// Обновление назначения мастера
+async function updateMasterAssignment(requestId, masterId) {
+    try {
+        const token = localStorage.getItem('access_token');
+
+        if (masterId) {
+            // Назначаем мастера
+            await fetch(`/dashboard/api/requests/${requestId}/assign-master`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ master_id: parseInt(masterId) })
+            });
+        } else {
+            // Снимаем мастера
+            await fetch(`/dashboard/api/requests/${requestId}/unassign-master`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+        }
+    } catch (error) {
+        console.error('❌ Ошибка обновления мастера:', error);
     }
 }
 
@@ -551,14 +592,16 @@ async function openEditModal(requestId) {
 
 async function loadMasters() {
     try {
+        console.log('🔄 Загружаем мастеров...');
         const token = localStorage.getItem('access_token');
         const response = await fetch('/dashboard/api/masters/available', {
             headers: { 'Authorization': `Bearer ${token}` }
         });
-
+        console.log('📡 Ответ API:', response.status);
         if (response.ok) {
             const masters = await response.json();
             const masterSelect = document.getElementById('editMaster');
+            console.log('🎯 Select элемент:', masterSelect);
 
             if (masterSelect) {
                 masterSelect.innerHTML = '<option value="">Не назначен</option>';

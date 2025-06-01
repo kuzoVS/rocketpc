@@ -273,65 +273,7 @@
 
     <div class="dashboard-layout">
         <!-- Sidebar -->
-        <aside class="sidebar" id="sidebar">
-            <div class="sidebar-header">
-                <div class="logo">🚀</div>
-                <h2>ROCKET PC</h2>
-            </div>
-            <nav>
-                <ul class="nav-menu">
-                    <li class="nav-item">
-                        <a href="/dashboard" class="nav-link">
-                            <span class="nav-icon">📊</span>
-                            <span>Главная</span>
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a href="/dashboard/requests" class="nav-link active">
-                            <span class="nav-icon">📝</span>
-                            <span>Заявки</span>
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a href="/dashboard/clients" class="nav-link">
-                            <span class="nav-icon">👥</span>
-                            <span>Клиенты</span>
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a href="/dashboard/inventory" class="nav-link">
-                            <span class="nav-icon">📦</span>
-                            <span>Склад</span>
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a href="/dashboard/statistics" class="nav-link">
-                            <span class="nav-icon">📈</span>
-                            <span>Статистика</span>
-                        </a>
-                    </li>
-                    <li class="nav-item" id="usersMenuItem" style="display: none;">
-                        <a href="/dashboard/users" class="nav-link">
-                            <span class="nav-icon">👤</span>
-                            <span>Пользователи</span>
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a href="/dashboard/settings" class="nav-link">
-                            <span class="nav-icon">⚙️</span>
-                            <span>Настройки</span>
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a href="#logout" class="nav-link" onclick="logout()">
-                            <span class="nav-icon">🚪</span>
-                            <span>Выход</span>
-                        </a>
-                    </li>
-                </ul>
-            </nav>
-        </aside>
-
+        {% include "dashboard/sidebar.html" %}
         <!-- Main Content -->
         <main class="main-content">
             <header class="header">
@@ -583,10 +525,7 @@
                     <div class="form-group">
                         <label>Мастер</label>
                         <select id="editMaster">
-                            <option value="">Не назначен</option>
-                            <option value="1">Алексей</option>
-                            <option value="2">Максим</option>
-                            <option value="3">Дмитрий</option>
+                            <option value="">Загрузка мастеров...</option>
                         </select>
                     </div>
                     <div class="form-group">
@@ -612,6 +551,6 @@
         </div>
     </div>
 
-    <script src="{{ url_for('static', path='/js/requests.js') }}"></script>
+    <script src="{{ url_for('static', path='/js/requests.js') }}?v=2"></script>
 </body>
 </html>
