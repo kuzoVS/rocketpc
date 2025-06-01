@@ -28,10 +28,20 @@ document.addEventListener('DOMContentLoaded', async function() {
 });
 
 // Загрузка информации о пользователе
-function loadUserInfo() {
+async function loadUserInfo() {
     try {
-        const user = JSON.parse(localStorage.getItem('user') || '{}');
-        console.log('👤 Загрузка информации о пользователе:', user.username);
+        const res = await fetch("/auth/profile", {
+            credentials: "include"
+        });
+
+        if (res.status === 401) {
+            window.location.href = "/auth/login";
+            return;
+        }
+
+        if (!res.ok) throw new Error("Ошибка загрузки профиля");
+
+        const user = await res.json();
 
         const userName = document.getElementById('userName');
         const userRole = document.getElementById('userRole');
@@ -55,25 +65,26 @@ function loadUserInfo() {
             userAvatar.textContent = user.full_name.charAt(0).toUpperCase();
         }
 
-        // Показываем пункт "Пользователи" для админов
+        // Показываем пункт "Пользователи" для админов/директоров
         if (user.role === 'admin' || user.role === 'director') {
             const usersMenuItem = document.getElementById('usersMenuItem');
             if (usersMenuItem) usersMenuItem.style.display = 'block';
         }
 
-    } catch (error) {
-        console.error('❌ Ошибка загрузки информации о пользователе:', error);
+    } catch (err) {
+        console.error("Ошибка загрузки профиля:", err);
+        window.location.href = "/auth/login";
     }
 }
+
 
 // Загрузка заявок с использованием существующего API
 async function loadRequests() {
     console.log('📋 Загружаем заявки...');
 
     try {
-        const token = localStorage.getItem('access_token');
         const response = await fetch('/dashboard/api/requests', {
-            headers: { 'Authorization': `Bearer ${token}` }
+            credentials: 'include'
         });
 
         if (response.status === 401) {
@@ -104,8 +115,9 @@ async function createRequest(requestData) {
         console.log('📝 Отправка данных:', requestData);
 
         // Используем открытый эндпоинт /api/requests для создания заявки
-        const response = await fetch('/api/requests', {
+        const response = await fetch('/dashboard/api/requests', {
             method: 'POST',
+            credentials: 'include',
             headers: {
                 'Content-Type': 'application/json'
             },
@@ -156,23 +168,23 @@ async function createRequest(requestData) {
 }
 
 // Обновление статуса заявки через API
-async function updateRequestStatus(requestId, newStatus, comment = '') {
+async function updateRequestStatus(requestId, newStatus, comment = '', problemDescription = '') {
     try {
-        const token = localStorage.getItem('access_token');
         const response = await fetch(`/dashboard/api/requests/${requestId}/status`, {
             method: 'PUT',
+            credentials: 'include',
             headers: {
-                'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
                 status: newStatus,
-                comment: comment
+                comment: comment,
+                problem_description: problemDescription
             })
         });
 
         if (response.ok) {
-            showNotification('Статус обновлен', 'success');
+            showNotification('Статус и проблема обновлены', 'success');
             closeModal('editRequestModal');
             await loadRequests();
         } else {
@@ -185,17 +197,15 @@ async function updateRequestStatus(requestId, newStatus, comment = '') {
     }
 }
 
+
 // Архивирование заявки
 async function archiveRequest(requestId) {
     if (!confirm('Вы уверены, что хотите архивировать эту заявку?')) return;
 
     try {
-        const token = localStorage.getItem('access_token');
         const response = await fetch(`/dashboard/api/requests/${requestId}/archive`, {
             method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${token}`
-            }
+            credentials: 'include'
         });
 
         if (response.ok) {
@@ -288,48 +298,44 @@ if (editRequestForm) {
 
         const newStatus = document.getElementById('editStatus').value;
         const comment = document.getElementById('editComment').value;
-        const masterId = document.getElementById('editMaster').value; // Добавить
-        const estimatedCost = document.getElementById('editEstimatedCost').value; // Добавить
+        const masterId = document.getElementById('editMaster').value;
+        const estimatedCost = document.getElementById('editEstimatedCost')?.value;
+        const updatedProblem = document.getElementById('editProblemDescription').value.trim(); // 🆕
 
-        // Показываем индикатор загрузки
         const submitButton = e.target.querySelector('button[type="submit"]');
         const originalText = submitButton.textContent;
         submitButton.disabled = true;
         submitButton.textContent = 'Сохранение...';
 
         try {
-            // Обновляем статус
-            await updateRequestStatus(currentEditRequestId, newStatus, comment);
+            await updateRequestStatus(currentEditRequestId, newStatus, comment, updatedProblem); // 🆕
 
-            // Если изменился мастер, обновляем назначение
             if (masterId !== undefined) {
                 await updateMasterAssignment(currentEditRequestId, masterId);
             }
 
-            // Если изменилась стоимость, обновляем её
             if (estimatedCost) {
                 await updateEstimatedCost(currentEditRequestId, estimatedCost);
             }
 
         } finally {
-            // Восстанавливаем кнопку
             submitButton.disabled = false;
             submitButton.textContent = originalText;
         }
     });
 }
 
+
 // Обновление назначения мастера
 async function updateMasterAssignment(requestId, masterId) {
     try {
-        const token = localStorage.getItem('access_token');
 
         if (masterId) {
             // Назначаем мастера
             await fetch(`/dashboard/api/requests/${requestId}/assign-master`, {
                 method: 'POST',
+                credentials: 'include',
                 headers: {
-                    'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({ master_id: parseInt(masterId) })
@@ -338,7 +344,7 @@ async function updateMasterAssignment(requestId, masterId) {
             // Снимаем мастера
             await fetch(`/dashboard/api/requests/${requestId}/unassign-master`, {
                 method: 'DELETE',
-                headers: { 'Authorization': `Bearer ${token}` }
+                credentials: 'include'
             });
         }
     } catch (error) {
@@ -595,7 +601,7 @@ async function loadMasters() {
         console.log('🔄 Загружаем мастеров...');
         const token = localStorage.getItem('access_token');
         const response = await fetch('/dashboard/api/masters/available', {
-            headers: { 'Authorization': `Bearer ${token}` }
+            credentials: 'include'
         });
         console.log('📡 Ответ API:', response.status);
         if (response.ok) {
@@ -751,9 +757,7 @@ function toggleSidebar() {
 // Выход из системы
 function logout() {
     console.log('🚪 Выход из системы');
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('user');
-    window.location.replace('/auth/login');
+    window.location.href = '/logout';
 }
 
 // Настройка обработчиков выхода

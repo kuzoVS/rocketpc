@@ -50,6 +50,7 @@ class UpdateRequestModel(BaseModel):
     priority: Optional[str] = None
     estimated_cost: Optional[float] = None
     comment: Optional[str] = None
+    problem_description: Optional[str] = Field(None, min_length=10, max_length=1000)
 
 
 @router.post("/", response_model=dict)
@@ -148,9 +149,6 @@ async def update_request(
         update_data: UpdateRequestModel,
         token_data: Dict = Depends(verify_token)
 ):
-    """
-    Обновление заявки (статус, приоритет, стоимость).
-    """
     try:
         # Обновляем статус если указан
         if update_data.status:
@@ -170,7 +168,11 @@ async def update_request(
             if not success:
                 raise HTTPException(status_code=404, detail="Заявка не найдена")
 
-        # TODO: Добавить обновление других полей (приоритет, стоимость)
+        # 🔧 Обновление описания проблемы
+        if update_data.problem_description:
+            await db.update_problem_description(request_id, update_data.problem_description)
+
+        # TODO: Добавить обновление приоритета, стоимости и т.д.
 
         return {"message": "Заявка обновлена"}
 

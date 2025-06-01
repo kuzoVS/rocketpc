@@ -668,6 +668,19 @@ class PostgreSQLDatabase:
 
             return [dict(request) for request in requests]
 
+    async def update_problem_description(self, request_id: str, new_description: str) -> bool:
+        async with self.pool.acquire() as conn:
+            try:
+                await conn.execute("""
+                    UPDATE repair_requests
+                    SET problem_description = $1, updated_at = NOW()
+                    WHERE request_id = $2
+                """, new_description, request_id)
+                return True
+            except Exception as e:
+                print(f"❌ Ошибка обновления описания проблемы: {e}")
+                return False
+
     async def update_request_status(self, request_id: str, new_status: str, user_id: int, comment: str = None) -> bool:
         """Обновление статуса заявки"""
         async with self.pool.acquire() as conn:

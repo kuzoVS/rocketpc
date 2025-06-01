@@ -170,6 +170,17 @@ async def create_request_dashboard_api(request_data: dict, token_data: Dict = De
         print(f"❌ Ошибка создания заявки: {e}")
         raise HTTPException(status_code=500, detail="Ошибка создания заявки")
 
+@app.get("/dashboard/api/requests")
+async def get_dashboard_requests(token_data: Dict = Depends(verify_token_from_cookie)):
+    try:
+        all_requests = await db.get_all_repair_requests()
+        recent_requests = sorted(all_requests, key=lambda r: r['created_at'], reverse=True)
+        return recent_requests[:5]
+    except Exception as e:
+        print(f"❌ Ошибка получения последних заявок: {e}")
+        raise HTTPException(status_code=500, detail="Не удалось загрузить заявки")
+
+
 @app.get("/dashboard/api/stats")
 async def dashboard_api_stats(token_data: Dict = Depends(verify_token_from_cookie)):
     try:
@@ -198,18 +209,28 @@ async def dashboard_api_stats(token_data: Dict = Depends(verify_token_from_cooki
 async def update_request_status_api(request_id: str, status_data: dict, token_data: Dict = Depends(verify_token_from_cookie)):
     try:
         print(f"🔄 Обновление статуса заявки {request_id} пользователем {token_data.get('username')}")
+
+        # Обновляем статус
         success = await db.update_request_status(
             request_id=request_id,
             new_status=status_data["status"],
             user_id=int(token_data["sub"]),
             comment=status_data.get("comment")
         )
+
         if not success:
             raise HTTPException(status_code=404, detail="Заявка не найдена")
-        return {"message": "Статус обновлен"}
+
+        # 🆕 Обновляем описание проблемы, если передано
+        if "problem_description" in status_data and status_data["problem_description"]:
+            await db.update_problem_description(request_id, status_data["problem_description"])
+
+        return {"message": "Статус и описание проблемы обновлены"}
+
     except Exception as e:
         print(f"❌ Ошибка обновления статуса: {e}")
         raise HTTPException(status_code=500, detail="Ошибка сервера")
+
 
 @app.post("/dashboard/api/requests/{request_id}/archive")
 async def archive_request_api(request_id: str, token_data: Dict = Depends(require_role_cookie(["admin", "director", "manager"]))):

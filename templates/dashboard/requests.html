@@ -6,13 +6,10 @@
     <title>Управление заявками - ROCKET PC</title>
     <link rel="stylesheet" href="{{ url_for('static', path='/css/dashboard.css') }}">
 
-    <!-- Проверка токена -->
     <script>
-        const token = localStorage.getItem('access_token');
-        if (!token) {
-            window.location.replace('/auth/login');
-            document.documentElement.style.display = 'none';
-        }
+        document.addEventListener("DOMContentLoaded", () => {
+        document.getElementById('pageBody').style.display = 'block';
+    });
     </script>
 
     <style>
@@ -494,7 +491,7 @@
             <form id="editRequestForm">
                 <div class="form-group">
                     <label>Описание проблемы</label>
-                    <textarea id="editProblemDescription" rows="4" readonly></textarea>
+                    <textarea id="editProblemDescription" rows="4"></textarea>
                 </div>
 
                 <div class="form-row">
