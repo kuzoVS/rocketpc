@@ -1483,3 +1483,63 @@ canvas:hover {
         font-size: 0.8rem;
     }
 }
+/* Стили для нижней легенды круговой диаграммы */
+.chart-placeholder {
+    position: relative;
+    overflow: visible;
+}
+
+.bottom-chart-legend {
+    display: flex;
+    justify-content: center;
+    gap: 2rem;
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid rgba(0, 255, 255, 0.1);
+    flex-wrap: wrap;
+}
+
+.bottom-chart-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.bottom-legend-color {
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    flex-shrink: 0;
+}
+
+/* Адаптивность для мобильных устройств */
+@media (max-width: 768px) {
+    .bottom-chart-legend {
+        gap: 1rem;
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .bottom-chart-legend-item {
+        font-size: 0.85rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .bottom-chart-legend {
+        gap: 0.5rem;
+        padding: 0.75rem;
+    }
+
+    .bottom-legend-color {
+        width: 14px;
+        height: 14px;
+    }
+
+    .bottom-chart-legend-item {
+        font-size: 0.8rem;
+    }
+}

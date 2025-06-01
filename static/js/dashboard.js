@@ -343,9 +343,9 @@ function createStatusChart(statusData) {
         { status: 'Ожидание запчастей', count: 1 }
     ];
 
-    drawEnhancedPieChart(ctx, data, rect.width, rect.height);
+    drawPieChart(ctx, data, rect.width, rect.height);
 
-    // Создаем боковую легенду
+    // Создаем легенду снизу
     createPieChartLegend(data);
 
     console.log('✅ Улучшенный график статусов создан');
@@ -567,91 +567,6 @@ function drawLegend(ctx, datasets, width, padding) {
     });
 }
 
-function drawEnhancedPieChart(ctx, data, width, height) {
-    // Очищаем canvas
-    ctx.clearRect(0, 0, width, height);
-
-    // Увеличиваем диаграмму - уменьшаем отступы и увеличиваем радиус
-    const centerX = width * 0.4; // Сдвигаем левее для места под легенду
-    const centerY = height / 2;
-    const radius = Math.min(centerX, centerY) - 30; // Увеличенный радиус
-
-    // Улучшенные цвета для статусов
-    const colors = {
-        'Принята': '#00ffff',
-        'Диагностика': '#0099ff',
-        'Ожидание запчастей': '#ffff00',
-        'В ремонте': '#ff9800',
-        'Тестирование': '#9c27b0',
-        'Готова к выдаче': '#4caf50',
-        'Выдана': '#00ff00'
-    };
-
-    const total = data.reduce((sum, item) => sum + item.count, 0);
-    if (total === 0) return;
-
-    let currentAngle = -Math.PI / 2; // Начинаем сверху
-
-    data.forEach((item, index) => {
-        const sliceAngle = (item.count / total) * 2 * Math.PI;
-        const color = colors[item.status] || `hsl(${index * 60}, 70%, 60%)`;
-
-        // Рисуем сегмент с тенью
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
-        ctx.shadowBlur = 10;
-        ctx.shadowOffsetX = 2;
-        ctx.shadowOffsetY = 2;
-
-        ctx.beginPath();
-        ctx.arc(centerX, centerY, radius, currentAngle, currentAngle + sliceAngle);
-        ctx.lineTo(centerX, centerY);
-        ctx.fillStyle = color;
-        ctx.fill();
-
-        // Убираем тень для обводки
-        ctx.shadowColor = 'transparent';
-        ctx.strokeStyle = '#1a1a2e';
-        ctx.lineWidth = 3;
-        ctx.stroke();
-
-        // Рисуем подпись на сегменте только если сегмент достаточно большой
-        if (sliceAngle > 0.2) {
-            const labelAngle = currentAngle + sliceAngle / 2;
-            const labelRadius = radius * 0.7;
-            const labelX = centerX + Math.cos(labelAngle) * labelRadius;
-            const labelY = centerY + Math.sin(labelAngle) * labelRadius;
-
-            ctx.fillStyle = '#000';
-            ctx.font = 'bold 16px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText(item.count, labelX, labelY + 5);
-        }
-
-        currentAngle += sliceAngle;
-    });
-
-    // Рисуем центральный круг (больше)
-    const innerRadius = radius * 0.45;
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, innerRadius, 0, Math.PI * 2);
-    ctx.fillStyle = '#1a1a2e';
-    ctx.fill();
-    ctx.strokeStyle = '#00ffff';
-    ctx.lineWidth = 3;
-    ctx.stroke();
-
-    // Общее количество в центре (больший шрифт)
-    ctx.fillStyle = '#00ffff';
-    ctx.font = 'bold 28px Arial';
-    ctx.textAlign = 'center';
-    ctx.fillText(total, centerX, centerY - 5);
-    ctx.font = '14px Arial';
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-    ctx.fillText('заявок', centerX, centerY + 20);
-}
-
-// Создание боковой легенды справа от диаграммы
-// Создание легенды снизу диаграммы
 function createPieChartLegend(data) {
     const canvas = document.getElementById('statusChart');
     if (!canvas) return;
@@ -691,7 +606,6 @@ function createPieChartLegend(data) {
 
     data.forEach((item, index) => {
         const color = colors[item.status] || `hsl(${index * 60}, 70%, 60%)`;
-        const percentage = total > 0 ? ((item.count / total) * 100).toFixed(1) : 0;
 
         const legendItem = document.createElement('div');
         legendItem.style.cssText = `
@@ -719,6 +633,7 @@ function createPieChartLegend(data) {
 
     container.appendChild(legendContainer);
 }
+
 
 // Функция для создания анимации появления графиков
 function animateCharts() {
@@ -769,30 +684,40 @@ async function loadCharts() {
 }
 
 function createPlaceholderCharts() {
-  console.log('⚠️ Создаем заглушки для графиков');
+    console.log('⚠️ Создаем заглушки для графиков');
 
-  const weeklyCanvas = document.getElementById('weeklyChart');
-  const statusCanvas = document.getElementById('statusChart');
+    const weeklyCanvas = document.getElementById('weeklyChart');
+    const statusCanvas = document.getElementById('statusChart');
 
-  if (weeklyCanvas) {
-    const ctx = weeklyCanvas.getContext('2d');
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
-    ctx.fillRect(0, 0, weeklyCanvas.width, weeklyCanvas.height);
-    ctx.fillStyle = '#ffffff';
-    ctx.font = '16px Arial';
-    ctx.textAlign = 'center';
-    ctx.fillText('Нет данных для отображения', weeklyCanvas.width/2, weeklyCanvas.height/2);
-  }
+    if (weeklyCanvas) {
+        const ctx = weeklyCanvas.getContext('2d');
+        const rect = weeklyCanvas.getBoundingClientRect();
+        weeklyCanvas.width = rect.width * window.devicePixelRatio;
+        weeklyCanvas.height = rect.height * window.devicePixelRatio;
+        ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
 
-  if (statusCanvas) {
-    const ctx = statusCanvas.getContext('2d');
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
-    ctx.fillRect(0, 0, statusCanvas.width, statusCanvas.height);
-    ctx.fillStyle = '#ffffff';
-    ctx.font = '16px Arial';
-    ctx.textAlign = 'center';
-    ctx.fillText('Нет данных для отображения', statusCanvas.width/2, statusCanvas.height/2);
-  }
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+        ctx.fillRect(0, 0, rect.width, rect.height);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '16px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('Нет данных для отображения', rect.width/2, rect.height/2);
+    }
+
+    if (statusCanvas) {
+        const ctx = statusCanvas.getContext('2d');
+        const rect = statusCanvas.getBoundingClientRect();
+        statusCanvas.width = rect.width * window.devicePixelRatio;
+        statusCanvas.height = rect.height * window.devicePixelRatio;
+        ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+        ctx.fillRect(0, 0, rect.width, rect.height);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '16px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('Нет данных для отображения', rect.width/2, rect.height/2);
+    }
 }
 
 // 🖊️ Отображение заявок в таблице
