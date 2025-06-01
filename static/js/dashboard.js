@@ -344,39 +344,95 @@ function createStatusChart(statusData) {
     ];
 
     drawEnhancedPieChart(ctx, data, rect.width, rect.height);
+
+    // Создаем боковую легенду
+    createPieChartLegend(data);
+
     console.log('✅ Улучшенный график статусов создан');
 }
 
-function drawEnhancedLineChart(ctx, chartData, width, height) {
+
+function drawEnhancedPieChart(ctx, data, width, height) {
     // Очищаем canvas
     ctx.clearRect(0, 0, width, height);
 
-    const padding = 60;
-    const chartWidth = width - padding * 2;
-    const chartHeight = height - padding * 2;
+    // Центрируем диаграмму, оставляя место снизу для легенды
+    const centerX = width / 2;
+    const centerY = height / 2 - 20; // Немного сдвигаем вверх для легенды
+    const radius = Math.min(centerX, centerY) - 40; // Увеличенный радиус
 
-    const labels = chartData.labels;
-    const datasets = chartData.datasets;
+    // Улучшенные цвета для статусов
+    const colors = {
+        'Принята': '#00ffff',
+        'Диагностика': '#0099ff',
+        'Ожидание запчастей': '#ffff00',
+        'В ремонте': '#ff9800',
+        'Тестирование': '#9c27b0',
+        'Готова к выдаче': '#4caf50',
+        'Выдана': '#00ff00'
+    };
 
-    if (!labels.length) return;
+    const total = data.reduce((sum, item) => sum + item.count, 0);
+    if (total === 0) return;
 
-    // Находим максимальное значение
-    const maxValue = Math.max(...datasets.flatMap(d => d.data)) || 10;
-    const stepX = chartWidth / (labels.length - 1);
-    const stepY = chartHeight / maxValue;
+    let currentAngle = -Math.PI / 2; // Начинаем сверху
 
-    // Рисуем сетку
-    drawGrid(ctx, padding, chartWidth, chartHeight, maxValue, labels.length);
+    data.forEach((item, index) => {
+        const sliceAngle = (item.count / total) * 2 * Math.PI;
+        const color = colors[item.status] || `hsl(${index * 60}, 70%, 60%)`;
 
-    // Рисуем линии данных
-    datasets.forEach((dataset, index) => {
-        drawDataLine(ctx, dataset, padding, stepX, stepY, chartHeight, index);
+        // Рисуем сегмент с тенью
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+        ctx.shadowBlur = 10;
+        ctx.shadowOffsetX = 2;
+        ctx.shadowOffsetY = 2;
+
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, radius, currentAngle, currentAngle + sliceAngle);
+        ctx.lineTo(centerX, centerY);
+        ctx.fillStyle = color;
+        ctx.fill();
+
+        // Убираем тень для обводки
+        ctx.shadowColor = 'transparent';
+        ctx.strokeStyle = '#1a1a2e';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
+        // Рисуем подпись на сегменте только если сегмент достаточно большой
+        if (sliceAngle > 0.2) {
+            const labelAngle = currentAngle + sliceAngle / 2;
+            const labelRadius = radius * 0.7;
+            const labelX = centerX + Math.cos(labelAngle) * labelRadius;
+            const labelY = centerY + Math.sin(labelAngle) * labelRadius;
+
+            ctx.fillStyle = '#000';
+            ctx.font = 'bold 16px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(item.count, labelX, labelY + 5);
+        }
+
+        currentAngle += sliceAngle;
     });
 
-    // Рисуем подписи осей
-    drawAxisLabels(ctx, labels, padding, stepX, chartHeight, maxValue, stepY);
+    // Рисуем центральный круг (больше)
+    const innerRadius = radius * 0.45;
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, innerRadius, 0, Math.PI * 2);
+    ctx.fillStyle = '#1a1a2e';
+    ctx.fill();
+    ctx.strokeStyle = '#00ffff';
+    ctx.lineWidth = 3;
+    ctx.stroke();
 
-    // Рисуем легенду
+    // Общее количество в центре (больший шрифт)
+    ctx.fillStyle = '#00ffff';
+    ctx.font = 'bold 28px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(total, centerX, centerY - 5);
+    ctx.font = '14px Arial';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+    ctx.fillText('заявок', centerX, centerY + 20);
 }
 
 function drawGrid(ctx, padding, chartWidth, chartHeight, maxValue, labelCount) {
@@ -515,9 +571,10 @@ function drawEnhancedPieChart(ctx, data, width, height) {
     // Очищаем canvas
     ctx.clearRect(0, 0, width, height);
 
-    const centerX = width / 2;
+    // Увеличиваем диаграмму - уменьшаем отступы и увеличиваем радиус
+    const centerX = width * 0.4; // Сдвигаем левее для места под легенду
     const centerY = height / 2;
-    const radius = Math.min(centerX, centerY) - 60;
+    const radius = Math.min(centerX, centerY) - 30; // Увеличенный радиус
 
     // Улучшенные цвета для статусов
     const colors = {
@@ -557,40 +614,110 @@ function drawEnhancedPieChart(ctx, data, width, height) {
         ctx.lineWidth = 3;
         ctx.stroke();
 
-        // Рисуем подпись на сегменте
-        const labelAngle = currentAngle + sliceAngle / 2;
-        const labelRadius = radius * 0.7;
-        const labelX = centerX + Math.cos(labelAngle) * labelRadius;
-        const labelY = centerY + Math.sin(labelAngle) * labelRadius;
+        // Рисуем подпись на сегменте только если сегмент достаточно большой
+        if (sliceAngle > 0.2) {
+            const labelAngle = currentAngle + sliceAngle / 2;
+            const labelRadius = radius * 0.7;
+            const labelX = centerX + Math.cos(labelAngle) * labelRadius;
+            const labelY = centerY + Math.sin(labelAngle) * labelRadius;
 
-        ctx.fillStyle = '#000';
-        ctx.font = 'bold 14px Arial';
-        ctx.textAlign = 'center';
-        ctx.fillText(item.count, labelX, labelY + 5);
-
-        // Рисуем линию к подписи
-        // Подпись статуса
+            ctx.fillStyle = '#000';
+            ctx.font = 'bold 16px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(item.count, labelX, labelY + 5);
+        }
 
         currentAngle += sliceAngle;
     });
 
-    // Рисуем центральный круг
+    // Рисуем центральный круг (больше)
+    const innerRadius = radius * 0.45;
     ctx.beginPath();
-    ctx.arc(centerX, centerY, radius * 0.4, 0, Math.PI * 2);
+    ctx.arc(centerX, centerY, innerRadius, 0, Math.PI * 2);
     ctx.fillStyle = '#1a1a2e';
     ctx.fill();
     ctx.strokeStyle = '#00ffff';
     ctx.lineWidth = 3;
     ctx.stroke();
 
-    // Общее количество в центре
+    // Общее количество в центре (больший шрифт)
     ctx.fillStyle = '#00ffff';
-    ctx.font = 'bold 24px Arial';
+    ctx.font = 'bold 28px Arial';
     ctx.textAlign = 'center';
     ctx.fillText(total, centerX, centerY - 5);
-    ctx.font = '12px Arial';
+    ctx.font = '14px Arial';
     ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-    ctx.fillText('заявок', centerX, centerY + 15);
+    ctx.fillText('заявок', centerX, centerY + 20);
+}
+
+// Создание боковой легенды справа от диаграммы
+// Создание легенды снизу диаграммы
+function createPieChartLegend(data) {
+    const canvas = document.getElementById('statusChart');
+    if (!canvas) return;
+
+    const container = canvas.parentElement;
+
+    // Удаляем старую легенду если есть
+    const oldLegend = container.querySelector('.bottom-chart-legend');
+    if (oldLegend) {
+        oldLegend.remove();
+    }
+
+    // Создаем контейнер для легенды снизу
+    const legendContainer = document.createElement('div');
+    legendContainer.className = 'bottom-chart-legend';
+    legendContainer.style.cssText = `
+        display: flex;
+        justify-content: center;
+        gap: 2rem;
+        margin-top: 1rem;
+        padding-top: 1rem;
+        border-top: 1px solid rgba(0, 255, 255, 0.1);
+        flex-wrap: wrap;
+    `;
+
+    const colors = {
+        'Принята': '#00ffff',
+        'Диагностика': '#0099ff',
+        'Ожидание запчастей': '#ffff00',
+        'В ремонте': '#ff9800',
+        'Тестирование': '#9c27b0',
+        'Готова к выдаче': '#4caf50',
+        'Выдана': '#00ff00'
+    };
+
+    const total = data.reduce((sum, item) => sum + item.count, 0);
+
+    data.forEach((item, index) => {
+        const color = colors[item.status] || `hsl(${index * 60}, 70%, 60%)`;
+        const percentage = total > 0 ? ((item.count / total) * 100).toFixed(1) : 0;
+
+        const legendItem = document.createElement('div');
+        legendItem.style.cssText = `
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.9rem;
+            color: rgba(255, 255, 255, 0.8);
+        `;
+
+        legendItem.innerHTML = `
+            <div style="
+                width: 16px;
+                height: 16px;
+                background: ${color};
+                border-radius: 3px;
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                flex-shrink: 0;
+            "></div>
+            <span>${item.status}</span>
+        `;
+
+        legendContainer.appendChild(legendItem);
+    });
+
+    container.appendChild(legendContainer);
 }
 
 // Функция для создания анимации появления графиков
@@ -765,4 +892,13 @@ function refreshDashboard() {
   loadDeviceStats();
 }
 
+function setActiveButton(button) {
+    // Убираем активный класс у всех кнопок в той же группе
+    const parent = button.parentElement;
+    const buttons = parent.querySelectorAll('.btn-chart-toggle');
+    buttons.forEach(btn => btn.classList.remove('active'));
+
+    // Добавляем активный класс к нажатой кнопке
+    button.classList.add('active');
+}
 console.log('✅ Dashboard.js загружен и готов к работе');

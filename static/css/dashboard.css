@@ -1423,138 +1423,63 @@ canvas {
 canvas:hover {
     filter: brightness(1.1);
 }
-/* Стили для легенды круговой диаграммы */
-.pie-chart-legend {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 0.75rem;
-    padding: 1rem;
-    margin-top: 1rem;
-    border-top: 1px solid rgba(0, 255, 255, 0.1);
-    background: rgba(0, 255, 255, 0.02);
-    border-radius: 0 0 12px 12px;
+/* Стили для нижней легенды круговой диаграммы */
+.chart-placeholder {
+    position: relative;
+    overflow: visible;
 }
 
-.pie-legend-item {
+.bottom-chart-legend {
+    display: flex;
+    justify-content: center;
+    gap: 2rem;
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid rgba(0, 255, 255, 0.1);
+    flex-wrap: wrap;
+}
+
+.bottom-chart-legend-item {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
-    padding: 0.5rem;
-    border-radius: 8px;
-    transition: all 0.3s ease;
-    cursor: pointer;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.8);
 }
 
-.pie-legend-item:hover {
-    background: rgba(0, 255, 255, 0.05);
-    transform: translateX(3px);
-}
-
-.pie-legend-color {
+.bottom-legend-color {
     width: 16px;
     height: 16px;
-    border-radius: 50%;
-    border: 2px solid rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
     flex-shrink: 0;
-    position: relative;
-    overflow: hidden;
 }
 
-.pie-legend-color::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    border-radius: 50%;
-    background: inherit;
-    filter: brightness(1.2);
-    opacity: 0;
-    transition: opacity 0.3s ease;
-}
-
-.pie-legend-item:hover .pie-legend-color::before {
-    opacity: 1;
-}
-
-.pie-legend-info {
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-    flex: 1;
-    min-width: 0;
-}
-
-.pie-legend-label {
-    font-size: 0.9rem;
-    color: rgba(255, 255, 255, 0.9);
-    font-weight: 500;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.pie-legend-count {
-    font-size: 0.8rem;
-    color: rgba(255, 255, 255, 0.6);
-    font-weight: 400;
-}
-
-.pie-legend-percentage {
-    font-size: 0.75rem;
-    color: #00ffff;
-    font-weight: 600;
-    margin-left: auto;
-    align-self: center;
-}
-
-/* Варианты расположения легенды */
-.pie-chart-legend.compact {
-    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-    gap: 0.5rem;
-    padding: 0.75rem;
-}
-
-.pie-chart-legend.horizontal {
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-    max-height: 60px;
-    overflow-y: auto;
-}
-
-/* Адаптивность */
+/* Адаптивность для мобильных устройств */
 @media (max-width: 768px) {
-    .pie-chart-legend {
-        grid-template-columns: repeat(2, 1fr);
-        gap: 0.5rem;
-        padding: 0.75rem;
+    .bottom-chart-legend {
+        gap: 1rem;
+        flex-direction: column;
+        align-items: center;
     }
 
-    .pie-legend-item {
-        padding: 0.4rem;
-        gap: 0.5rem;
-    }
-
-    .pie-legend-color {
-        width: 14px;
-        height: 14px;
-    }
-
-    .pie-legend-label {
+    .bottom-chart-legend-item {
         font-size: 0.85rem;
-    }
-
-    .pie-legend-count {
-        font-size: 0.75rem;
-    }
-
-    .pie-legend-percentage {
-        font-size: 0.7rem;
     }
 }
 
 @media (max-width: 480px) {
-    .pie-chart-legend {
-        grid-template-columns: 1fr;
+    .bottom-chart-legend {
+        gap: 0.5rem;
+        padding: 0.75rem;
+    }
+
+    .bottom-legend-color {
+        width: 14px;
+        height: 14px;
+    }
+
+    .bottom-chart-legend-item {
+        font-size: 0.8rem;
     }
 }
