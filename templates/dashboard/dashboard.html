@@ -39,15 +39,27 @@
                 </div>
             </header>
 
+            <!-- Основные показатели -->
             <div class="stats-grid fade-in">
                 <div class="stat-card">
                     <div class="stat-header">
                         <div class="stat-icon">📋</div>
                     </div>
+                    <div class="stat-value" id="totalRequestsCount">0</div>
+                    <div class="stat-label">Всего заявок</div>
+                    <div class="stat-change">
+                        <span>📊</span> За все время
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <div class="stat-icon">⚡</div>
+                    </div>
                     <div class="stat-value" id="activeRequestsCount">0</div>
                     <div class="stat-label">Активных заявок</div>
                     <div class="stat-change">
-                        <span>↑</span> +12% за неделю
+                        <span>🔥</span> В работе сейчас
                     </div>
                 </div>
 
@@ -57,8 +69,8 @@
                     </div>
                     <div class="stat-value" id="completedRequestsCount">0</div>
                     <div class="stat-label">Выполнено за месяц</div>
-                    <div class="stat-change">
-                        <span>↑</span> +8% к прошлому месяцу
+                    <div class="stat-change" id="completedChange">
+                        <span>↑</span> +0% к прошлому месяцу
                     </div>
                 </div>
 
@@ -69,16 +81,42 @@
                     <div class="stat-value" id="monthlyRevenue">₽0</div>
                     <div class="stat-label">Доход за месяц</div>
                     <div class="stat-change">
-                        <span>↑</span> +23% к прошлому месяцу
+                        <span>💵</span> Оценочный доход
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <div class="stat-icon">⏱️</div>
+                    </div>
+                    <div class="stat-value" id="avgRepairTime">0</div>
+                    <div class="stat-label">Среднее время ремонта</div>
+                    <div class="stat-change">
+                        <span>📈</span> дней
+                    </div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-header">
+                        <div class="stat-icon">💳</div>
+                    </div>
+                    <div class="stat-value" id="avgCost">₽0</div>
+                    <div class="stat-label">Средняя стоимость</div>
+                    <div class="stat-change">
+                        <span>📊</span> За ремонт
                     </div>
                 </div>
             </div>
 
+            <!-- Графики и статистика -->
             <div class="charts-section fade-in">
                 <div class="chart-card">
                     <div class="chart-header">
                         <h3 class="chart-title">Статистика заявок за неделю</h3>
-                        <button class="btn btn-outline">Подробнее</button>
+                        <div style="display: flex; gap: 1rem;">
+                            <button class="btn btn-outline btn-sm" onclick="loadWeeklyChart()">Неделя</button>
+                            <button class="btn btn-outline btn-sm" onclick="loadMonthlyChart()">Месяц</button>
+                        </div>
                     </div>
                     <div class="chart-placeholder">
                         <canvas id="weeklyChart" width="400" height="300"></canvas>
@@ -87,7 +125,7 @@
 
                 <div class="chart-card">
                     <div class="chart-header">
-                        <h3 class="chart-title">Статусы заявок</h3>
+                        <h3 class="chart-title">Распределение по статусам</h3>
                     </div>
                     <div class="chart-placeholder">
                         <canvas id="statusChart" width="300" height="300"></canvas>
@@ -95,6 +133,36 @@
                 </div>
             </div>
 
+            <!-- Дополнительные секции -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 3rem;">
+                <!-- Топ мастеров -->
+                <div class="recent-section fade-in">
+                    <div class="section-header">
+                        <h3 class="section-title">Топ мастеров за месяц</h3>
+                        <span class="btn btn-outline btn-sm">🏆</span>
+                    </div>
+                    <div id="topMastersList" style="padding: 1rem 0;">
+                        <div style="text-align: center; color: rgba(255,255,255,0.6);">
+                            Загрузка данных...
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Статистика по устройствам -->
+                <div class="recent-section fade-in">
+                    <div class="section-header">
+                        <h3 class="section-title">Популярные устройства</h3>
+                        <span class="btn btn-outline btn-sm">📱</span>
+                    </div>
+                    <div id="deviceStatsList" style="padding: 1rem 0;">
+                        <div style="text-align: center; color: rgba(255,255,255,0.6);">
+                            Загрузка данных...
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Последние заявки -->
             <div class="recent-section fade-in">
                 <div class="section-header">
                     <h3 class="section-title">Последние заявки</h3>
