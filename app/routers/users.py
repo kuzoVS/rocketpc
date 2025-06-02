@@ -9,6 +9,7 @@ from app.auth import verify_token_from_cookie, require_role_cookie
 from app.config import settings
 
 router = APIRouter(prefix="/dashboard/users", tags=["users"])
+templates = Jinja2Templates(directory="templates")
 
 @router.get("", response_class=HTMLResponse)
 async def users_page(
@@ -93,6 +94,13 @@ async def create_user(
         if role not in ['admin', 'director', 'manager', 'master']:
             raise HTTPException(status_code=400, detail="Неверная роль пользователя")
 
+        # Проверяем существование username и email
+        if await db.check_username_exists(username):
+            return RedirectResponse(url="/dashboard/users?error=username_exists", status_code=302)
+
+        if await db.check_email_exists(email):
+            return RedirectResponse(url="/dashboard/users?error=email_exists", status_code=302)
+
         # Создаем пользователя
         user_id = await db.create_user(
             username=username.strip(),
@@ -103,11 +111,6 @@ async def create_user(
         )
 
         print(f"✅ Создан пользователь с ID: {user_id}")
-
-        # Обновляем телефон если указан
-        if phone and phone.strip():
-            # Здесь можно добавить логику обновления телефона
-            pass
 
         return RedirectResponse(url="/dashboard/users?success=created", status_code=302)
 
@@ -138,6 +141,10 @@ async def update_user(
             raise HTTPException(status_code=400, detail="Неверная роль пользователя")
 
         active_status = is_active.lower() == 'true'
+
+        # Проверяем существование email (исключая текущего пользователя)
+        if await db.check_email_exists(email, exclude_user_id=user_id):
+            return RedirectResponse(url="/dashboard/users?error=email_exists", status_code=302)
 
         # Обновляем основную информацию пользователя
         success = await db.update_user_info(
@@ -207,6 +214,29 @@ async def deactivate_user(
         return RedirectResponse(url="/dashboard/users?error=deactivation_failed", status_code=302)
 
 
+@router.post("/{user_id}/delete", response_class=HTMLResponse)
+async def delete_user(
+        user_id: int,
+        token_data: Dict = Depends(require_role_cookie(["admin", "director"]))
+):
+    """Удаление пользователя (помечается как неактивный)"""
+    try:
+        # Проверяем, что это не текущий пользователь
+        if token_data.get("sub") == str(user_id):
+            return RedirectResponse(url="/dashboard/users?error=cannot_delete_self", status_code=302)
+
+        success = await db.delete_user(user_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="Пользователь не найден")
+
+        print(f"✅ Удален пользователь с ID: {user_id}")
+        return RedirectResponse(url="/dashboard/users?success=deleted", status_code=302)
+
+    except Exception as e:
+        print(f"❌ Ошибка удаления пользователя: {e}")
+        return RedirectResponse(url="/dashboard/users?error=deletion_failed", status_code=302)
+
+
 # API endpoints для AJAX запросов
 @router.get("/api/list")
 async def get_users_api(
@@ -240,3 +270,16 @@ async def get_user_api(
     except Exception as e:
         print(f"❌ Ошибка получения пользователя через API: {e}")
         raise HTTPException(status_code=500, detail="Ошибка загрузки данных")
+
+
+@router.get("/api/statistics")
+async def get_user_statistics_api(
+        token_data: Dict = Depends(require_role_cookie(["admin", "director"]))
+):
+    """API для получения статистики пользователей"""
+    try:
+        stats = await db.get_user_statistics()
+        return stats
+    except Exception as e:
+        print(f"❌ Ошибка получения статистики пользователей: {e}")
+        raise HTTPException(status_code=500, detail="Ошибка загрузки статистики")

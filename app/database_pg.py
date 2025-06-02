@@ -1552,5 +1552,297 @@ class PostgreSQLDatabase:
                 print(f"❌ Ошибка проверки email: {e}")
                 return False
 
+    # Добавьте эти методы в класс PostgreSQLDatabase в файле app/database_pg.py
+
+    async def get_user_statistics(self) -> Dict:
+        """Получение статистики пользователей"""
+        async with self.pool.acquire() as conn:
+            try:
+                # Общее количество пользователей
+                total_users = await conn.fetchval('SELECT COUNT(*) FROM users WHERE is_active = TRUE')
+
+                # Количество по ролям
+                admin_users = await conn.fetchval('''
+                    SELECT COUNT(*) FROM users 
+                    WHERE role IN ('admin', 'director') AND is_active = TRUE
+                ''')
+
+                master_users = await conn.fetchval('''
+                    SELECT COUNT(*) FROM users 
+                    WHERE role = 'master' AND is_active = TRUE
+                ''')
+
+                # Новые пользователи за последние 30 дней
+                recent_users = await conn.fetchval('''
+                    SELECT COUNT(*) FROM users 
+                    WHERE created_at >= CURRENT_DATE - INTERVAL '30 days'
+                    AND is_active = TRUE
+                ''')
+
+                return {
+                    'total_users': total_users or 0,
+                    'admin_users': admin_users or 0,
+                    'master_users': master_users or 0,
+                    'recent_users': recent_users or 0
+                }
+
+            except Exception as e:
+                print(f"❌ Ошибка получения статистики пользователей: {e}")
+                return {
+                    'total_users': 0,
+                    'admin_users': 0,
+                    'master_users': 0,
+                    'recent_users': 0
+                }
+
+    async def check_username_exists(self, username: str, exclude_user_id: int = None) -> bool:
+        """Проверка существования имени пользователя"""
+        async with self.pool.acquire() as conn:
+            try:
+                if exclude_user_id:
+                    result = await conn.fetchval('''
+                        SELECT id FROM users 
+                        WHERE username = $1 AND id != $2
+                    ''', username, exclude_user_id)
+                else:
+                    result = await conn.fetchval('''
+                        SELECT id FROM users 
+                        WHERE username = $1
+                    ''', username)
+                return result is not None
+            except Exception as e:
+                print(f"❌ Ошибка проверки имени пользователя: {e}")
+                return False
+
+    async def check_email_exists(self, email: str, exclude_user_id: int = None) -> bool:
+        """Проверка существования email"""
+        async with self.pool.acquire() as conn:
+            try:
+                if exclude_user_id:
+                    result = await conn.fetchval('''
+                        SELECT id FROM users 
+                        WHERE email = $1 AND id != $2
+                    ''', email, exclude_user_id)
+                else:
+                    result = await conn.fetchval('''
+                        SELECT id FROM users 
+                        WHERE email = $1
+                    ''', email)
+                return result is not None
+            except Exception as e:
+                print(f"❌ Ошибка проверки email: {e}")
+                return False
+
+    async def update_user_info(self, user_id: int, email: str, full_name: str, role: str, is_active: bool,
+                               phone: str = None) -> bool:
+        """Обновление информации о пользователе"""
+        async with self.pool.acquire() as conn:
+            try:
+                await conn.execute('''
+                    UPDATE users 
+                    SET email = $1, full_name = $2, role = $3, is_active = $4, phone = $5
+                    WHERE id = $6
+                ''', email, full_name, role, is_active, phone, user_id)
+                return True
+            except Exception as e:
+                print(f"❌ Ошибка обновления пользователя: {e}")
+                return False
+
+    async def update_user_status(self, user_id: int, is_active: bool) -> bool:
+        """Обновление статуса пользователя (активен/неактивен)"""
+        async with self.pool.acquire() as conn:
+            try:
+                result = await conn.execute('''
+                    UPDATE users 
+                    SET is_active = $1
+                    WHERE id = $2
+                ''', is_active, user_id)
+                return result == 'UPDATE 1'
+            except Exception as e:
+                print(f"❌ Ошибка обновления статуса пользователя: {e}")
+                return False
+
+    async def delete_user(self, user_id: int) -> bool:
+        """Удаление пользователя (помечается как неактивный)"""
+        async with self.pool.acquire() as conn:
+            try:
+                # Помечаем как неактивного вместо полного удаления
+                await conn.execute('''
+                    UPDATE users 
+                    SET is_active = FALSE
+                    WHERE id = $1
+                ''', user_id)
+                return True
+            except Exception as e:
+                print(f"❌ Ошибка удаления пользователя: {e}")
+                return False
+
+    async def get_user_by_username(self, username: str) -> Optional[Dict]:
+        """Получение пользователя по имени пользователя"""
+        async with self.pool.acquire() as conn:
+            try:
+                user = await conn.fetchrow('''
+                    SELECT id, username, email, full_name, role, is_active, created_at, last_login, phone
+                    FROM users 
+                    WHERE username = $1
+                ''', username)
+                return dict(user) if user else None
+            except Exception as e:
+                print(f"❌ Ошибка получения пользователя по username: {e}")
+                return None
+
+    async def get_users_by_role(self, role: str) -> List[Dict]:
+        """Получение пользователей по роли"""
+        async with self.pool.acquire() as conn:
+            try:
+                users = await conn.fetch('''
+                    SELECT id, username, email, full_name, role, is_active, created_at, last_login, phone
+                    FROM users 
+                    WHERE role = $1 AND is_active = TRUE
+                    ORDER BY full_name
+                ''', role)
+                return [dict(user) for user in users]
+            except Exception as e:
+                print(f"❌ Ошибка получения пользователей по роли: {e}")
+                return []
+
+    async def get_active_masters(self) -> List[Dict]:
+        """Получение списка активных мастеров"""
+        async with self.pool.acquire() as conn:
+            try:
+                masters = await conn.fetch('''
+                    SELECT 
+                        u.id, u.username, u.full_name, u.phone, u.specialization,
+                        u.current_repairs_count, u.max_concurrent_repairs,
+                        u.is_available,
+                        COUNT(rr.id) as active_repairs
+                    FROM users u
+                    LEFT JOIN repair_requests rr ON u.id = rr.assigned_master_id 
+                        AND rr.status NOT IN ('Выдана', 'Готова к выдаче')
+                        AND rr.is_archived = FALSE
+                    WHERE u.role = 'master' AND u.is_active = TRUE
+                    GROUP BY u.id
+                    ORDER BY active_repairs ASC, u.full_name ASC
+                ''')
+                return [dict(master) for master in masters]
+            except Exception as e:
+                print(f"❌ Ошибка получения активных мастеров: {e}")
+                return []
+
+    async def get_user_activity_stats(self, user_id: int) -> Dict:
+        """Получение статистики активности пользователя"""
+        async with self.pool.acquire() as conn:
+            try:
+                # Для мастеров - статистика по ремонтам
+                if await self.is_user_master(user_id):
+                    stats = await conn.fetchrow('''
+                        SELECT 
+                            COUNT(*) as total_repairs,
+                            COUNT(CASE WHEN rr.status = 'Выдана' THEN 1 END) as completed_repairs,
+                            COUNT(CASE WHEN rr.status NOT IN ('Выдана', 'Готова к выдаче') THEN 1 END) as active_repairs,
+                            AVG(CASE WHEN rr.final_cost IS NOT NULL THEN rr.final_cost END) as avg_repair_cost,
+                            AVG(EXTRACT(EPOCH FROM (rr.actual_completion - rr.created_at))/3600)::numeric(10,2) as avg_repair_hours
+                        FROM repair_requests rr
+                        WHERE rr.assigned_master_id = $1
+                            AND rr.created_at >= CURRENT_DATE - INTERVAL '30 days'
+                    ''', user_id)
+                else:
+                    # Для менеджеров/администраторов - статистика по созданным заявкам
+                    stats = await conn.fetchrow('''
+                        SELECT 
+                            COUNT(*) as total_created,
+                            COUNT(CASE WHEN rr.status = 'Выдана' THEN 1 END) as completed_created,
+                            0 as active_repairs,
+                            AVG(CASE WHEN rr.final_cost IS NOT NULL THEN rr.final_cost END) as avg_repair_cost,
+                            0 as avg_repair_hours
+                        FROM repair_requests rr
+                        WHERE rr.created_by_id = $1
+                            AND rr.created_at >= CURRENT_DATE - INTERVAL '30 days'
+                    ''', user_id)
+
+                return dict(stats) if stats else {}
+            except Exception as e:
+                print(f"❌ Ошибка получения статистики активности: {e}")
+                return {}
+
+    async def is_user_master(self, user_id: int) -> bool:
+        """Проверка, является ли пользователь мастером"""
+        async with self.pool.acquire() as conn:
+            try:
+                role = await conn.fetchval('SELECT role FROM users WHERE id = $1', user_id)
+                return role == 'master'
+            except Exception as e:
+                print(f"❌ Ошибка проверки роли пользователя: {e}")
+                return False
+
+    async def update_user_last_login(self, user_id: int) -> bool:
+        """Обновление времени последнего входа"""
+        async with self.pool.acquire() as conn:
+            try:
+                await conn.execute('''
+                    UPDATE users 
+                    SET last_login = CURRENT_TIMESTAMP 
+                    WHERE id = $1
+                ''', user_id)
+                return True
+            except Exception as e:
+                print(f"❌ Ошибка обновления времени входа: {e}")
+                return False
+
+    async def search_users(self, search_term: str) -> List[Dict]:
+        """Поиск пользователей по имени, email или username"""
+        async with self.pool.acquire() as conn:
+            try:
+                users = await conn.fetch('''
+                    SELECT id, username, email, full_name, role, is_active, created_at, last_login, phone
+                    FROM users 
+                    WHERE 
+                        (full_name ILIKE $1 OR 
+                         username ILIKE $1 OR 
+                         email ILIKE $1 OR
+                         role ILIKE $1)
+                        AND is_active = TRUE
+                    ORDER BY full_name
+                ''', f'%{search_term}%')
+                return [dict(user) for user in users]
+            except Exception as e:
+                print(f"❌ Ошибка поиска пользователей: {e}")
+                return []
+
+    async def get_users_count_by_role(self) -> Dict:
+        """Получение количества пользователей по ролям"""
+        async with self.pool.acquire() as conn:
+            try:
+                roles_stats = await conn.fetch('''
+                    SELECT role, COUNT(*) as count
+                    FROM users 
+                    WHERE is_active = TRUE
+                    GROUP BY role
+                    ORDER BY count DESC
+                ''')
+
+                result = {role['role']: role['count'] for role in roles_stats}
+                return result
+            except Exception as e:
+                print(f"❌ Ошибка получения статистики по ролям: {e}")
+                return {}
+
+    async def bulk_update_user_status(self, user_ids: List[int], is_active: bool) -> int:
+        """Массовое обновление статуса пользователей"""
+        async with self.pool.acquire() as conn:
+            try:
+                result = await conn.execute('''
+                    UPDATE users 
+                    SET is_active = $1
+                    WHERE id = ANY($2)
+                ''', is_active, user_ids)
+
+                # Извлекаем количество обновленных записей
+                updated_count = int(result.split()[-1]) if result else 0
+                return updated_count
+            except Exception as e:
+                print(f"❌ Ошибка массового обновления статуса: {e}")
+                return 0
+
 # Создание глобального экземпляра
 db = PostgreSQLDatabase()

@@ -67,7 +67,7 @@ app.include_router(main.router)
 app.include_router(requests.router, prefix="/api")
 app.include_router(auth.router)
 app.include_router(clients.router, prefix="/api")
-app.include_router(users.router, prefix="/api")
+app.include_router(users.router)
 
 
 @app.get("/dashboard", response_class=HTMLResponse)
@@ -77,10 +77,6 @@ async def dashboard_page(request: Request):
 @app.get("/dashboard/requests", response_class=HTMLResponse)
 async def dashboard_requests(request: Request):
     return templates.TemplateResponse("dashboard/requests.html", {"request": request, "page": "requests"})
-
-@app.get("/dashboard/users", response_class=HTMLResponse)
-async def dashboard_users(request: Request):
-    return templates.TemplateResponse("dashboard/users.html", {"request": request, "page": "users"})
 
 @app.get("/dashboard/clients", response_class=HTMLResponse)
 async def dashboard_statistics(request: Request):
