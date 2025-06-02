@@ -109,7 +109,7 @@ async function loadUsers() {
     }
 }
 
-// Загрузка статистики пользователей
+// ИСПРАВЛЕННАЯ функция загрузки статистики пользователей
 async function loadUserStatistics() {
     try {
         console.log('📊 Загружаем статистику пользователей...');
@@ -122,16 +122,26 @@ async function loadUserStatistics() {
             const stats = await response.json();
             console.log('✅ Статистика загружена:', stats);
 
-            // Обновляем элементы статистики
+            // ИСПРАВЛЕНО: используем правильные ID элементов
             updateStatCard('totalUsers', stats.total_users || 0);
             updateStatCard('adminUsers', stats.admin_users || 0);
             updateStatCard('masterUsers', stats.master_users || 0);
             updateStatCard('recentUsers', stats.recent_users || 0);
         } else {
-            console.log('⚠️ Не удалось загрузить статистику');
+            console.log('⚠️ Не удалось загрузить статистику, заполняем нулями');
+            // Заполняем нулями при ошибке
+            updateStatCard('totalUsers', 0);
+            updateStatCard('adminUsers', 0);
+            updateStatCard('masterUsers', 0);
+            updateStatCard('recentUsers', 0);
         }
     } catch (error) {
         console.error('❌ Ошибка загрузки статистики:', error);
+        // Заполняем нулями при ошибке
+        updateStatCard('totalUsers', 0);
+        updateStatCard('adminUsers', 0);
+        updateStatCard('masterUsers', 0);
+        updateStatCard('recentUsers', 0);
     }
 }
 
@@ -380,6 +390,7 @@ async function toggleUserStatus(userId, activate, username) {
         if (response.ok) {
             showNotification(`Пользователь ${activate ? 'активирован' : 'деактивирован'}`, 'success');
             await loadUsers(); // Перезагружаем список
+            await loadUserStatistics(); // Обновляем статистику
         } else {
             showNotification(`Ошибка ${action}ции пользователя`, 'error');
         }
@@ -389,7 +400,7 @@ async function toggleUserStatus(userId, activate, username) {
     }
 }
 
-// Удаление пользователя
+// ИСПРАВЛЕННАЯ функция удаления пользователя
 async function deleteUser(userId, username) {
     // Дополнительная проверка
     if (window.currentUserId && userId === window.currentUserId) {
@@ -407,25 +418,41 @@ async function deleteUser(userId, username) {
     if (!doubleConfirm) return;
 
     try {
+        console.log(`🗑️ Попытка удаления пользователя ${userId} (${username})`);
+
         const response = await fetch(`/dashboard/users/${userId}/delete`, {
             method: 'POST',
             credentials: 'include'
         });
+
+        console.log(`📡 Ответ сервера: ${response.status}`);
 
         if (response.ok) {
             showNotification(`Пользователь ${username} удален`, 'success');
             await loadUsers(); // Перезагружаем список
             await loadUserStatistics(); // Обновляем статистику
         } else {
-            const errorText = await response.text();
-            if (response.status === 400 && errorText.includes('cannot_delete_self')) {
-                showNotification('Нельзя удалить самого себя', 'error');
+            // Читаем ответ как текст для получения более подробной информации
+            const responseText = await response.text();
+            console.log(`❌ Ошибка удаления: ${responseText}`);
+
+            // Проверяем различные типы ошибок
+            if (response.status === 400) {
+                if (responseText.includes('cannot_delete_self')) {
+                    showNotification('Нельзя удалить самого себя', 'error');
+                } else if (responseText.includes('cannot_delete_last_admin')) {
+                    showNotification('Нельзя удалить последнего администратора', 'error');
+                } else {
+                    showNotification('Ошибка: нарушены ограничения удаления', 'error');
+                }
+            } else if (response.status === 404) {
+                showNotification('Пользователь не найден', 'error');
             } else {
-                showNotification('Ошибка удаления пользователя', 'error');
+                showNotification(`Ошибка удаления: ${response.status}`, 'error');
             }
         }
     } catch (error) {
-        console.error('❌ Ошибка удаления:', error);
+        console.error('❌ Ошибка сети при удалении:', error);
         showNotification('Ошибка подключения к серверу', 'error');
     }
 }
@@ -566,11 +593,14 @@ function updateUsersCount(count) {
     }
 }
 
-// Обновление карточек статистики
+// ИСПРАВЛЕННАЯ функция обновления карточек статистики
 function updateStatCard(elementId, value) {
     const element = document.getElementById(elementId);
     if (element) {
         element.textContent = value;
+        console.log(`✅ Обновлена статистика ${elementId}: ${value}`);
+    } else {
+        console.warn(`⚠️ Элемент статистики ${elementId} не найден`);
     }
 }
 
@@ -735,80 +765,3 @@ style.textContent = `
             transform: translateX(100%);
             opacity: 0;
         }
-    }
-
-    /* Стили для кнопки удаления */
-    .btn-danger {
-        background: rgba(220, 53, 69, 0.2) !important;
-        color: #dc3545 !important;
-        border-color: rgba(220, 53, 69, 0.3) !important;
-    }
-
-    .btn-danger:hover {
-        background: rgba(220, 53, 69, 0.3) !important;
-        border-color: #dc3545 !important;
-        transform: translateY(-2px);
-        box-shadow: 0 5px 15px rgba(220, 53, 69, 0.3);
-    }
-
-    /* Улучшенные стили для модальных окон */
-    .modal {
-        backdrop-filter: blur(10px);
-    }
-
-    .modal-content {
-        animation: modalSlideIn 0.4s ease-out;
-    }
-
-    @keyframes modalSlideIn {
-        from {
-            opacity: 0;
-            transform: scale(0.9) translateY(-50px);
-        }
-        to {
-            opacity: 1;
-            transform: scale(1) translateY(0);
-        }
-    }
-
-    /* Стили для загрузки */
-    .loading-overlay {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0, 0, 0, 0.7);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 9999;
-    }
-
-    .loading-content {
-        background: rgba(26, 26, 46, 0.9);
-        padding: 2rem;
-        border-radius: 12px;
-        border: 1px solid rgba(0, 255, 255, 0.3);
-        text-align: center;
-        backdrop-filter: blur(10px);
-    }
-
-    .loading-spinner {
-        width: 40px;
-        height: 40px;
-        border: 3px solid rgba(0, 255, 255, 0.3);
-        border-top: 3px solid #00ffff;
-        border-radius: 50%;
-        animation: spin 1s linear infinite;
-        margin: 0 auto 1rem;
-    }
-
-    @keyframes spin {
-        0% { transform: rotate(0deg); }
-        100% { transform: rotate(360deg); }
-    }
-`;
-document.head.appendChild(style);
-
-console.log('✅ JavaScript для управления пользователями загружен и готов к работе');

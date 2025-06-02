@@ -11,6 +11,7 @@ from app.config import settings
 router = APIRouter(prefix="/dashboard/users", tags=["users"])
 templates = Jinja2Templates(directory="templates")
 
+
 @router.get("", response_class=HTMLResponse)
 async def users_page(
         request: Request,
@@ -74,7 +75,8 @@ async def create_user(
             email=email.strip(),
             password=password,
             full_name=full_name.strip(),
-            role=role
+            role=role,
+            phone=phone.strip() if phone else None
         )
 
         print(f"✅ Создан пользователь с ID: {user_id}")
@@ -186,33 +188,45 @@ async def delete_user(
         user_id: int,
         token_data: Dict = Depends(require_role_cookie(["admin", "director"]))
 ):
-    """Удаление пользователя (помечается как неактивный)"""
+    """ИСПРАВЛЕННОЕ удаление пользователя (помечается как неактивный)"""
     try:
+        print(f"🗑️ Попытка удаления пользователя {user_id}")
+
         # Проверяем, что это не текущий пользователь
-        if token_data.get("sub") == str(user_id):
+        current_user_id = int(token_data.get("sub"))
+        if current_user_id == user_id:
+            print(f"❌ Попытка удалить самого себя: {current_user_id}")
             return RedirectResponse(url="/dashboard/users?error=cannot_delete_self", status_code=302)
 
         # Проверяем существование пользователя
         user = await db.get_user(user_id)
         if not user:
+            print(f"❌ Пользователь {user_id} не найден")
             return RedirectResponse(url="/dashboard/users?error=user_not_found", status_code=302)
 
         # Проверяем, не последний ли это администратор
         if user['role'] in ['admin', 'director']:
             admin_count = await db.get_users_count_by_role()
             total_admins = admin_count.get('admin', 0) + admin_count.get('director', 0)
+            print(f"📊 Общее количество админов: {total_admins}")
+
             if total_admins <= 1:
+                print(f"❌ Попытка удаления последнего администратора")
                 return RedirectResponse(url="/dashboard/users?error=cannot_delete_last_admin", status_code=302)
 
+        # Удаляем пользователя (фактически помечаем как неактивного)
         success = await db.delete_user(user_id)
         if not success:
+            print(f"❌ Не удалось удалить пользователя {user_id}")
             return RedirectResponse(url="/dashboard/users?error=deletion_failed", status_code=302)
 
-        print(f"✅ Удален пользователь с ID: {user_id}")
+        print(f"✅ Пользователь {user_id} успешно удален")
         return RedirectResponse(url="/dashboard/users?success=deleted", status_code=302)
 
     except Exception as e:
         print(f"❌ Ошибка удаления пользователя: {e}")
+        import traceback
+        traceback.print_exc()
         return RedirectResponse(url="/dashboard/users?error=deletion_failed", status_code=302)
 
 
@@ -255,10 +269,21 @@ async def get_user_api(
 async def get_user_statistics_api(
         token_data: Dict = Depends(require_role_cookie(["admin", "director"]))
 ):
-    """API для получения статистики пользователей"""
+    """ИСПРАВЛЕННОЕ API для получения статистики пользователей"""
     try:
+        print("📊 Запрос статистики пользователей...")
         stats = await db.get_user_statistics()
+        print(f"✅ Статистика получена: {stats}")
         return stats
     except Exception as e:
         print(f"❌ Ошибка получения статистики пользователей: {e}")
-        raise HTTPException(status_code=500, detail="Ошибка загрузки статистики")
+        import traceback
+        traceback.print_exc()
+
+        # Возвращаем пустую статистику вместо ошибки
+        return {
+            "total_users": 0,
+            "admin_users": 0,
+            "master_users": 0,
+            "recent_users": 0
+        }

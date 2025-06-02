@@ -1499,39 +1499,57 @@ class PostgreSQLDatabase:
                 return False
 
     async def get_user_statistics(self) -> Dict:
-        """Получение статистики пользователей"""
+        """ИСПРАВЛЕННОЕ получение статистики пользователей"""
         async with self.pool.acquire() as conn:
             try:
+                print("📊 Получение статистики пользователей из БД...")
+
                 # Общее количество пользователей
                 total_users = await conn.fetchval('SELECT COUNT(*) FROM users WHERE is_active = TRUE')
+                print(f"   Всего пользователей: {total_users}")
 
-                # Количество по ролям
-                roles_stats = await conn.fetch('''
-                    SELECT role, COUNT(*) as count
-                    FROM users 
-                    WHERE is_active = TRUE
-                    GROUP BY role
-                    ORDER BY count DESC
+                # Количество администраторов и директоров
+                admin_users = await conn.fetchval('''
+                    SELECT COUNT(*) FROM users 
+                    WHERE role IN ('admin', 'director') AND is_active = TRUE
                 ''')
+                print(f"   Администраторов: {admin_users}")
 
-                # Недавние пользователи
+                # Количество мастеров
+                master_users = await conn.fetchval('''
+                    SELECT COUNT(*) FROM users 
+                    WHERE role = 'master' AND is_active = TRUE
+                ''')
+                print(f"   Мастеров: {master_users}")
+
+                # Новые пользователи за последние 30 дней
                 recent_users = await conn.fetchval('''
                     SELECT COUNT(*) FROM users 
                     WHERE created_at >= CURRENT_DATE - INTERVAL '30 days'
                     AND is_active = TRUE
                 ''')
+                print(f"   Новых за месяц: {recent_users}")
 
-                return {
+                stats = {
                     'total_users': total_users or 0,
-                    'roles_stats': [dict(role) for role in roles_stats],
+                    'admin_users': admin_users or 0,
+                    'master_users': master_users or 0,
                     'recent_users': recent_users or 0
                 }
 
+                print(f"✅ Статистика пользователей сформирована: {stats}")
+                return stats
+
             except Exception as e:
                 print(f"❌ Ошибка получения статистики пользователей: {e}")
+                import traceback
+                traceback.print_exc()
+
+                # Возвращаем нулевую статистику при ошибке
                 return {
                     'total_users': 0,
-                    'roles_stats': [],
+                    'admin_users': 0,
+                    'master_users': 0,
                     'recent_users': 0
                 }
 
@@ -1684,18 +1702,38 @@ class PostgreSQLDatabase:
                 return False
 
     async def delete_user(self, user_id: int) -> bool:
-        """Удаление пользователя (помечается как неактивный)"""
+        """ИСПРАВЛЕННОЕ удаление пользователя (помечается как неактивный)"""
         async with self.pool.acquire() as conn:
             try:
+                print(f"🗑️ Попытка удаления пользователя {user_id} в БД")
+
+                # Проверяем существование пользователя
+                user_exists = await conn.fetchval('SELECT id FROM users WHERE id = $1', user_id)
+                if not user_exists:
+                    print(f"❌ Пользователь {user_id} не найден в БД")
+                    return False
+
                 # Помечаем как неактивного вместо полного удаления
-                await conn.execute('''
+                result = await conn.execute('''
                     UPDATE users 
                     SET is_active = FALSE
                     WHERE id = $1
                 ''', user_id)
-                return True
+
+                print(f"📝 Результат SQL: {result}")
+
+                # Проверяем результат
+                if result == 'UPDATE 1':
+                    print(f"✅ Пользователь {user_id} успешно деактивирован")
+                    return True
+                else:
+                    print(f"❌ Не удалось деактивировать пользователя {user_id}")
+                    return False
+
             except Exception as e:
-                print(f"❌ Ошибка удаления пользователя: {e}")
+                print(f"❌ Ошибка удаления пользователя в БД: {e}")
+                import traceback
+                traceback.print_exc()
                 return False
 
     async def get_user_by_username(self, username: str) -> Optional[Dict]:
