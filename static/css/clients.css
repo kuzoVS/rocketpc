@@ -1,0 +1,314 @@
+/* Дополнительные стили для страницы клиентов - добавьте в templates/dashboard/clients.html в секцию <style> */
+
+/* Улучшенные стили для карточек клиентов */
+.client-card {
+    position: relative;
+    overflow: hidden;
+}
+
+.client-card::after {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: linear-gradient(45deg, transparent, rgba(0, 255, 255, 0.05), transparent);
+    transform: rotate(45deg);
+    transition: transform 0.6s;
+    opacity: 0;
+}
+
+.client-card:hover::after {
+    transform: rotate(45deg) translate(50%, 50%);
+    opacity: 1;
+}
+
+/* Анимация появления карточек */
+.client-card {
+    opacity: 0;
+    transform: translateY(20px);
+    animation: fadeInUp 0.6s ease forwards;
+}
+
+.client-card:nth-child(1) { animation-delay: 0.1s; }
+.client-card:nth-child(2) { animation-delay: 0.2s; }
+.client-card:nth-child(3) { animation-delay: 0.3s; }
+.client-card:nth-child(4) { animation-delay: 0.4s; }
+.client-card:nth-child(5) { animation-delay: 0.5s; }
+.client-card:nth-child(6) { animation-delay: 0.6s; }
+
+@keyframes fadeInUp {
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Улучшенный VIP бадж */
+.vip-badge {
+    animation: pulse 2s infinite;
+    box-shadow: 0 4px 15px rgba(255, 215, 0, 0.4);
+}
+
+@keyframes pulse {
+    0%, 100% {
+        transform: scale(1);
+        box-shadow: 0 4px 15px rgba(255, 215, 0, 0.4);
+    }
+    50% {
+        transform: scale(1.05);
+        box-shadow: 0 6px 20px rgba(255, 215, 0, 0.6);
+    }
+}
+
+/* Стили для поиска */
+.search-box input:focus + .search-icon {
+    color: #00ffff;
+    transform: translateY(-50%) scale(1.2);
+}
+
+/* Улучшенные фильтры */
+.filters-section select:focus,
+.filters-section input:focus {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0, 255, 255, 0.2);
+}
+
+/* Стили для пустого состояния */
+.empty-state-icon {
+    animation: float 3s ease-in-out infinite;
+}
+
+@keyframes float {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-10px); }
+}
+
+/* Улучшенные модальные окна */
+.modal {
+    backdrop-filter: blur(10px);
+}
+
+.modal-content {
+    box-shadow: 0 25px 80px rgba(0, 0, 0, 0.7);
+    animation: modalSlideIn 0.4s ease-out;
+}
+
+@keyframes modalSlideIn {
+    from {
+        opacity: 0;
+        transform: scale(0.9) translateY(-50px);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+/* Стили для вкладок в модальном окне */
+.detail-tab {
+    position: relative;
+    overflow: hidden;
+}
+
+.detail-tab::before {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    background: linear-gradient(90deg, #00ffff, #0099ff);
+    transform: scaleX(0);
+    transition: transform 0.3s ease;
+}
+
+.detail-tab:hover::before {
+    transform: scaleX(1);
+}
+
+/* Стили для элементов истории заявок */
+.request-item {
+    position: relative;
+    overflow: hidden;
+}
+
+.request-item::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: linear-gradient(180deg, #00ffff, #0099ff);
+    transform: scaleY(0);
+    transition: transform 0.3s ease;
+}
+
+.request-item:hover::before {
+    transform: scaleY(1);
+}
+
+/* Улучшенная пагинация */
+.page-btn {
+    position: relative;
+    overflow: hidden;
+}
+
+.page-btn::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(0, 255, 255, 0.2), transparent);
+    transition: left 0.5s;
+}
+
+.page-btn:hover::before {
+    left: 100%;
+}
+
+/* Статистические карточки */
+.stat-box {
+    position: relative;
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+.stat-box::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #00ffff, #0099ff);
+    transform: scaleX(0);
+    transition: transform 0.3s ease;
+}
+
+.stat-box:hover::before {
+    transform: scaleX(1);
+}
+
+.stat-box:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 15px 40px rgba(0, 255, 255, 0.2);
+}
+
+/* Адаптивные улучшения */
+@media (max-width: 768px) {
+    .clients-grid {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+
+    .client-card {
+        padding: 1rem;
+    }
+
+    .client-avatar {
+        width: 50px;
+        height: 50px;
+        font-size: 20px;
+    }
+
+    .client-stats {
+        grid-template-columns: 1fr 1fr;
+        gap: 0.5rem;
+    }
+
+    .client-actions {
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+
+    .filters-section {
+        padding: 1rem;
+    }
+
+    .statistics-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.75rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .clients-grid {
+        gap: 0.75rem;
+    }
+
+    .client-card {
+        padding: 0.75rem;
+    }
+
+    .statistics-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .modal-content {
+        margin: 0.5rem;
+        padding: 1rem;
+    }
+
+    .detail-tabs {
+        flex-wrap: wrap;
+    }
+
+    .detail-tab {
+        flex: 1;
+        min-width: 120px;
+        font-size: 0.9rem;
+        padding: 0.75rem 1rem;
+    }
+}
+
+/* Темы для статусов заявок */
+.status-new {
+    background: linear-gradient(135deg, rgba(0, 255, 255, 0.2), rgba(0, 255, 255, 0.1));
+    border: 1px solid rgba(0, 255, 255, 0.3);
+}
+
+.status-in-progress {
+    background: linear-gradient(135deg, rgba(255, 193, 7, 0.2), rgba(255, 193, 7, 0.1));
+    border: 1px solid rgba(255, 193, 7, 0.3);
+}
+
+.status-completed {
+    background: linear-gradient(135deg, rgba(0, 255, 0, 0.2), rgba(0, 255, 0, 0.1));
+    border: 1px solid rgba(0, 255, 0, 0.3);
+}
+
+.status-pending {
+    background: linear-gradient(135deg, rgba(255, 152, 0, 0.2), rgba(255, 152, 0, 0.1));
+    border: 1px solid rgba(255, 152, 0, 0.3);
+}
+
+/* Загрузочная анимация */
+.loading-clients {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 200px;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.loading-clients .loading {
+    width: 50px;
+    height: 50px;
+    border-width: 4px;
+}
+
+/* Плавная анимация для счетчиков */
+.stat-number {
+    transition: all 0.3s ease;
+}
+
+.stat-box:hover .stat-number {
+    transform: scale(1.1);
+    color: #ffffff;
+}

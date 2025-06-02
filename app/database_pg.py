@@ -254,6 +254,244 @@ class PostgreSQLDatabase:
             except Exception as e:
                 print(f"Ошибка создания пользователей: {e}")
 
+    # Добавьте эти методы в app/database_pg.py в класс PostgreSQLDatabase
+    async def get_all_clients(self, include_stats: bool = True) -> List[Dict]:
+        """Получение всех клиентов с статистикой"""
+        async with self.pool.acquire() as conn:
+            if include_stats:
+                clients = await conn.fetch('''
+                    SELECT 
+                        c.id,
+                        c.full_name,
+                        c.phone,
+                        c.email,
+                        c.address,
+                        c.created_at,
+                        c.total_repairs,
+                        c.is_vip,
+                        c.notes,
+                        COUNT(rr.id) as active_requests,
+                        COUNT(CASE WHEN rr.status = 'Выдана' THEN 1 END) as completed_requests,
+                        SUM(CASE WHEN rr.final_cost IS NOT NULL THEN rr.final_cost ELSE 0 END) as total_spent,
+                        MAX(rr.created_at) as last_request_date,
+                        AVG(CASE WHEN rr.final_cost IS NOT NULL THEN rr.final_cost END) as avg_cost
+                    FROM clients c
+                    LEFT JOIN repair_requests rr ON c.id = rr.client_id AND rr.is_archived = FALSE
+                    GROUP BY c.id
+                    ORDER BY c.created_at DESC
+                ''')
+            else:
+                clients = await conn.fetch('''
+                    SELECT id, full_name, phone, email, address, created_at, total_repairs, is_vip, notes
+                    FROM clients 
+                    ORDER BY created_at DESC
+                ''')
+
+            return [dict(client) for client in clients]
+
+    async def get_client_by_id(self, client_id: int) -> Optional[Dict]:
+        """Получение клиента по ID с полной статистикой"""
+        async with self.pool.acquire() as conn:
+            client = await conn.fetchrow('''
+                SELECT 
+                    c.*,
+                    COUNT(rr.id) as total_requests,
+                    COUNT(CASE WHEN rr.status != 'Выдана' AND rr.is_archived = FALSE THEN 1 END) as active_requests,
+                    COUNT(CASE WHEN rr.status = 'Выдана' THEN 1 END) as completed_requests,
+                    SUM(CASE WHEN rr.final_cost IS NOT NULL THEN rr.final_cost ELSE 0 END) as total_spent,
+                    AVG(CASE WHEN rr.final_cost IS NOT NULL THEN rr.final_cost END) as avg_cost,
+                    MAX(rr.created_at) as last_request_date,
+                    MIN(rr.created_at) as first_request_date
+                FROM clients c
+                LEFT JOIN repair_requests rr ON c.id = rr.client_id AND rr.is_archived = FALSE
+                WHERE c.id = $1
+                GROUP BY c.id
+            ''', client_id)
+
+            return dict(client) if client else None
+
+    async def get_client_requests(self, client_id: int, limit: int = None) -> List[Dict]:
+        """Получение всех заявок клиента"""
+        async with self.pool.acquire() as conn:
+            limit_clause = f"LIMIT {limit}" if limit else ""
+
+            requests = await conn.fetch(f'''
+                SELECT 
+                    rr.*,
+                    u.full_name as master_name,
+                    u.specialization as master_specialization
+                FROM repair_requests rr
+                LEFT JOIN users u ON rr.assigned_master_id = u.id
+                WHERE rr.client_id = $1 AND rr.is_archived = FALSE
+                ORDER BY rr.created_at DESC
+                {limit_clause}
+            ''', client_id)
+
+            return [dict(request) for request in requests]
+
+    async def search_clients(self, search_term: str) -> List[Dict]:
+        """Поиск клиентов по имени, телефону или email"""
+        async with self.pool.acquire() as conn:
+            clients = await conn.fetch('''
+                SELECT 
+                    c.id,
+                    c.full_name,
+                    c.phone,
+                    c.email,
+                    c.address,
+                    c.created_at,
+                    c.total_repairs,
+                    c.is_vip,
+                    COUNT(rr.id) as active_requests
+                FROM clients c
+                LEFT JOIN repair_requests rr ON c.id = rr.client_id 
+                    AND rr.status != 'Выдана' AND rr.is_archived = FALSE
+                WHERE 
+                    c.full_name ILIKE $1 OR 
+                    c.phone ILIKE $1 OR 
+                    c.email ILIKE $1
+                GROUP BY c.id
+                ORDER BY c.full_name
+            ''', f'%{search_term}%')
+
+            return [dict(client) for client in clients]
+
+    async def update_client(self, client_id: int, client_data: dict) -> bool:
+        """Обновление информации о клиенте"""
+        async with self.pool.acquire() as conn:
+            try:
+                set_clauses = []
+                values = []
+                param_count = 1
+
+                updatable_fields = {
+                    'full_name': 'full_name',
+                    'phone': 'phone',
+                    'email': 'email',
+                    'address': 'address',
+                    'is_vip': 'is_vip',
+                    'notes': 'notes'
+                }
+
+                for field_name, db_field in updatable_fields.items():
+                    if field_name in client_data and client_data[field_name] is not None:
+                        set_clauses.append(f"{db_field} = ${param_count}")
+                        values.append(client_data[field_name])
+                        param_count += 1
+
+                if not set_clauses:
+                    return True
+
+                query = f'''
+                    UPDATE clients 
+                    SET {', '.join(set_clauses)}
+                    WHERE id = ${param_count}
+                '''
+                values.append(client_id)
+
+                await conn.execute(query, *values)
+                return True
+
+            except Exception as e:
+                print(f"❌ Ошибка обновления клиента: {e}")
+                return False
+
+    async def delete_client(self, client_id: int) -> bool:
+        """Удаление клиента (только если нет активных заявок)"""
+        async with self.pool.acquire() as conn:
+            try:
+                # Проверяем, есть ли активные заявки
+                active_requests = await conn.fetchval('''
+                    SELECT COUNT(*) FROM repair_requests 
+                    WHERE client_id = $1 AND status != 'Выдана' AND is_archived = FALSE
+                ''', client_id)
+
+                if active_requests > 0:
+                    return False
+
+                # Архивируем все заявки клиента
+                await conn.execute('''
+                    UPDATE repair_requests 
+                    SET is_archived = TRUE 
+                    WHERE client_id = $1
+                ''', client_id)
+
+                # Удаляем клиента
+                await conn.execute('DELETE FROM clients WHERE id = $1', client_id)
+                return True
+
+            except Exception as e:
+                print(f"❌ Ошибка удаления клиента: {e}")
+                return False
+
+    async def get_client_device_types(self, client_id: int) -> List[Dict]:
+        """Получение типов устройств, которые ремонтировал клиент"""
+        async with self.pool.acquire() as conn:
+            devices = await conn.fetch('''
+                SELECT 
+                    device_type,
+                    COUNT(*) as count,
+                    MAX(created_at) as last_repair
+                FROM repair_requests 
+                WHERE client_id = $1 AND is_archived = FALSE
+                GROUP BY device_type
+                ORDER BY count DESC
+            ''', client_id)
+
+            return [dict(device) for device in devices]
+
+    async def get_vip_clients(self) -> List[Dict]:
+        """Получение VIP клиентов"""
+        async with self.pool.acquire() as conn:
+            clients = await conn.fetch('''
+                SELECT 
+                    c.*,
+                    COUNT(rr.id) as total_requests,
+                    SUM(CASE WHEN rr.final_cost IS NOT NULL THEN rr.final_cost ELSE 0 END) as total_spent
+                FROM clients c
+                LEFT JOIN repair_requests rr ON c.id = rr.client_id AND rr.is_archived = FALSE
+                WHERE c.is_vip = TRUE
+                GROUP BY c.id
+                ORDER BY total_spent DESC
+            ''')
+
+            return [dict(client) for client in clients]
+
+    async def get_client_statistics(self) -> Dict:
+        """Общая статистика по клиентам"""
+        async with self.pool.acquire() as conn:
+            stats = await conn.fetchrow('''
+                SELECT 
+                    COUNT(*) as total_clients,
+                    COUNT(CASE WHEN is_vip = TRUE THEN 1 END) as vip_clients,
+                    COUNT(CASE WHEN created_at >= CURRENT_DATE - INTERVAL '30 days' THEN 1 END) as new_clients_month,
+                    AVG(total_repairs) as avg_repairs_per_client
+                FROM clients
+            ''')
+
+            # Топ клиенты по тратам
+            top_clients = await conn.fetch('''
+                SELECT 
+                    c.full_name,
+                    SUM(CASE WHEN rr.final_cost IS NOT NULL THEN rr.final_cost ELSE 0 END) as total_spent,
+                    COUNT(rr.id) as total_requests
+                FROM clients c
+                LEFT JOIN repair_requests rr ON c.id = rr.client_id AND rr.is_archived = FALSE
+                GROUP BY c.id, c.full_name
+                HAVING SUM(CASE WHEN rr.final_cost IS NOT NULL THEN rr.final_cost ELSE 0 END) > 0
+                ORDER BY total_spent DESC
+                LIMIT 5
+            ''')
+
+            return {
+                'total_clients': stats['total_clients'] or 0,
+                'vip_clients': stats['vip_clients'] or 0,
+                'new_clients_month': stats['new_clients_month'] or 0,
+                'avg_repairs_per_client': float(stats['avg_repairs_per_client'] or 0),
+                'top_clients': [dict(client) for client in top_clients]
+            }
+
+
     # Методы для работы с мастерами
     async def get_available_masters(self) -> List[Dict]:
         """Получение списка доступных мастеров"""
@@ -1198,253 +1436,6 @@ class PostgreSQLDatabase:
             except Exception as e:
                 print(f"❌ Ошибка обновления клиента: {e}")
                 return False
-
-
-# Добавьте эти методы в app/database_pg.py в класс PostgreSQLDatabase
-
-async def get_all_clients(self, include_stats: bool = True) -> List[Dict]:
-    """Получение всех клиентов с статистикой"""
-    async with self.pool.acquire() as conn:
-        if include_stats:
-            clients = await conn.fetch('''
-                SELECT 
-                    c.id,
-                    c.full_name,
-                    c.phone,
-                    c.email,
-                    c.address,
-                    c.created_at,
-                    c.total_repairs,
-                    c.is_vip,
-                    c.notes,
-                    COUNT(rr.id) as active_requests,
-                    COUNT(CASE WHEN rr.status = 'Выдана' THEN 1 END) as completed_requests,
-                    SUM(CASE WHEN rr.final_cost IS NOT NULL THEN rr.final_cost ELSE 0 END) as total_spent,
-                    MAX(rr.created_at) as last_request_date,
-                    AVG(CASE WHEN rr.final_cost IS NOT NULL THEN rr.final_cost END) as avg_cost
-                FROM clients c
-                LEFT JOIN repair_requests rr ON c.id = rr.client_id AND rr.is_archived = FALSE
-                GROUP BY c.id
-                ORDER BY c.created_at DESC
-            ''')
-        else:
-            clients = await conn.fetch('''
-                SELECT id, full_name, phone, email, address, created_at, total_repairs, is_vip, notes
-                FROM clients 
-                ORDER BY created_at DESC
-            ''')
-
-        return [dict(client) for client in clients]
-
-
-async def get_client_by_id(self, client_id: int) -> Optional[Dict]:
-    """Получение клиента по ID с полной статистикой"""
-    async with self.pool.acquire() as conn:
-        client = await conn.fetchrow('''
-            SELECT 
-                c.*,
-                COUNT(rr.id) as total_requests,
-                COUNT(CASE WHEN rr.status != 'Выдана' AND rr.is_archived = FALSE THEN 1 END) as active_requests,
-                COUNT(CASE WHEN rr.status = 'Выдана' THEN 1 END) as completed_requests,
-                SUM(CASE WHEN rr.final_cost IS NOT NULL THEN rr.final_cost ELSE 0 END) as total_spent,
-                AVG(CASE WHEN rr.final_cost IS NOT NULL THEN rr.final_cost END) as avg_cost,
-                MAX(rr.created_at) as last_request_date,
-                MIN(rr.created_at) as first_request_date
-            FROM clients c
-            LEFT JOIN repair_requests rr ON c.id = rr.client_id AND rr.is_archived = FALSE
-            WHERE c.id = $1
-            GROUP BY c.id
-        ''', client_id)
-
-        return dict(client) if client else None
-
-
-async def get_client_requests(self, client_id: int, limit: int = None) -> List[Dict]:
-    """Получение всех заявок клиента"""
-    async with self.pool.acquire() as conn:
-        limit_clause = f"LIMIT {limit}" if limit else ""
-
-        requests = await conn.fetch(f'''
-            SELECT 
-                rr.*,
-                u.full_name as master_name,
-                u.specialization as master_specialization
-            FROM repair_requests rr
-            LEFT JOIN users u ON rr.assigned_master_id = u.id
-            WHERE rr.client_id = $1 AND rr.is_archived = FALSE
-            ORDER BY rr.created_at DESC
-            {limit_clause}
-        ''', client_id)
-
-        return [dict(request) for request in requests]
-
-
-async def search_clients(self, search_term: str) -> List[Dict]:
-    """Поиск клиентов по имени, телефону или email"""
-    async with self.pool.acquire() as conn:
-        clients = await conn.fetch('''
-            SELECT 
-                c.id,
-                c.full_name,
-                c.phone,
-                c.email,
-                c.address,
-                c.created_at,
-                c.total_repairs,
-                c.is_vip,
-                COUNT(rr.id) as active_requests
-            FROM clients c
-            LEFT JOIN repair_requests rr ON c.id = rr.client_id 
-                AND rr.status != 'Выдана' AND rr.is_archived = FALSE
-            WHERE 
-                c.full_name ILIKE $1 OR 
-                c.phone ILIKE $1 OR 
-                c.email ILIKE $1
-            GROUP BY c.id
-            ORDER BY c.full_name
-        ''', f'%{search_term}%')
-
-        return [dict(client) for client in clients]
-
-
-async def update_client(self, client_id: int, client_data: dict) -> bool:
-    """Обновление информации о клиенте"""
-    async with self.pool.acquire() as conn:
-        try:
-            set_clauses = []
-            values = []
-            param_count = 1
-
-            updatable_fields = {
-                'full_name': 'full_name',
-                'phone': 'phone',
-                'email': 'email',
-                'address': 'address',
-                'is_vip': 'is_vip',
-                'notes': 'notes'
-            }
-
-            for field_name, db_field in updatable_fields.items():
-                if field_name in client_data and client_data[field_name] is not None:
-                    set_clauses.append(f"{db_field} = ${param_count}")
-                    values.append(client_data[field_name])
-                    param_count += 1
-
-            if not set_clauses:
-                return True
-
-            query = f'''
-                UPDATE clients 
-                SET {', '.join(set_clauses)}
-                WHERE id = ${param_count}
-            '''
-            values.append(client_id)
-
-            await conn.execute(query, *values)
-            return True
-
-        except Exception as e:
-            print(f"❌ Ошибка обновления клиента: {e}")
-            return False
-
-
-async def delete_client(self, client_id: int) -> bool:
-    """Удаление клиента (только если нет активных заявок)"""
-    async with self.pool.acquire() as conn:
-        try:
-            # Проверяем, есть ли активные заявки
-            active_requests = await conn.fetchval('''
-                SELECT COUNT(*) FROM repair_requests 
-                WHERE client_id = $1 AND status != 'Выдана' AND is_archived = FALSE
-            ''', client_id)
-
-            if active_requests > 0:
-                return False
-
-            # Архивируем все заявки клиента
-            await conn.execute('''
-                UPDATE repair_requests 
-                SET is_archived = TRUE 
-                WHERE client_id = $1
-            ''', client_id)
-
-            # Удаляем клиента
-            await conn.execute('DELETE FROM clients WHERE id = $1', client_id)
-            return True
-
-        except Exception as e:
-            print(f"❌ Ошибка удаления клиента: {e}")
-            return False
-
-
-async def get_client_device_types(self, client_id: int) -> List[Dict]:
-    """Получение типов устройств, которые ремонтировал клиент"""
-    async with self.pool.acquire() as conn:
-        devices = await conn.fetch('''
-            SELECT 
-                device_type,
-                COUNT(*) as count,
-                MAX(created_at) as last_repair
-            FROM repair_requests 
-            WHERE client_id = $1 AND is_archived = FALSE
-            GROUP BY device_type
-            ORDER BY count DESC
-        ''', client_id)
-
-        return [dict(device) for device in devices]
-
-
-async def get_vip_clients(self) -> List[Dict]:
-    """Получение VIP клиентов"""
-    async with self.pool.acquire() as conn:
-        clients = await conn.fetch('''
-            SELECT 
-                c.*,
-                COUNT(rr.id) as total_requests,
-                SUM(CASE WHEN rr.final_cost IS NOT NULL THEN rr.final_cost ELSE 0 END) as total_spent
-            FROM clients c
-            LEFT JOIN repair_requests rr ON c.id = rr.client_id AND rr.is_archived = FALSE
-            WHERE c.is_vip = TRUE
-            GROUP BY c.id
-            ORDER BY total_spent DESC
-        ''')
-
-        return [dict(client) for client in clients]
-
-
-async def get_client_statistics(self) -> Dict:
-    """Общая статистика по клиентам"""
-    async with self.pool.acquire() as conn:
-        stats = await conn.fetchrow('''
-            SELECT 
-                COUNT(*) as total_clients,
-                COUNT(CASE WHEN is_vip = TRUE THEN 1 END) as vip_clients,
-                COUNT(CASE WHEN created_at >= CURRENT_DATE - INTERVAL '30 days' THEN 1 END) as new_clients_month,
-                AVG(total_repairs) as avg_repairs_per_client
-            FROM clients
-        ''')
-
-        # Топ клиенты по тратам
-        top_clients = await conn.fetch('''
-            SELECT 
-                c.full_name,
-                SUM(CASE WHEN rr.final_cost IS NOT NULL THEN rr.final_cost ELSE 0 END) as total_spent,
-                COUNT(rr.id) as total_requests
-            FROM clients c
-            LEFT JOIN repair_requests rr ON c.id = rr.client_id AND rr.is_archived = FALSE
-            GROUP BY c.id, c.full_name
-            HAVING SUM(CASE WHEN rr.final_cost IS NOT NULL THEN rr.final_cost ELSE 0 END) > 0
-            ORDER BY total_spent DESC
-            LIMIT 5
-        ''')
-
-        return {
-            'total_clients': stats['total_clients'] or 0,
-            'vip_clients': stats['vip_clients'] or 0,
-            'new_clients_month': stats['new_clients_month'] or 0,
-            'avg_repairs_per_client': float(stats['avg_repairs_per_client'] or 0),
-            'top_clients': [dict(client) for client in top_clients]
-        }
 
 # Создание глобального экземпляра
 db = PostgreSQLDatabase()

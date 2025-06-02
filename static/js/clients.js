@@ -23,6 +23,12 @@ document.addEventListener('DOMContentLoaded', async function() {
     // Настраиваем обработчики форм
     setupFormHandlers();
 
+    // Настраиваем обработчики для выхода
+    setupLogoutHandlers();
+
+    // Проверяем предзаполненные данные клиента из localStorage
+    checkPreselectedClient();
+
     console.log('✅ Страница клиентов готова к работе');
 });
 
@@ -100,6 +106,7 @@ async function loadClients(force = false) {
         } else {
             console.log('❌ Ошибка загрузки:', response.status);
             showNotification('Ошибка загрузки клиентов', 'error');
+            showEmptyState('Ошибка загрузки данных');
         }
     } catch (error) {
         console.error('❌ Ошибка:', error);
@@ -163,7 +170,7 @@ function filterAndDisplayClients() {
             case 'vip':
                 return client.is_vip;
             case 'active':
-                return client.active_requests > 0;
+                return (client.active_requests || 0) > 0;
             case 'new':
                 const createdDate = new Date(client.created_at);
                 const monthAgo = new Date();
@@ -366,6 +373,10 @@ function filterClients() {
     filterAndDisplayClients();
 }
 
+function sortClients() {
+    filterAndDisplayClients();
+}
+
 function changeItemsPerPage() {
     itemsPerPage = parseInt(document.getElementById('itemsPerPage').value);
     currentPage = 1;
@@ -376,7 +387,42 @@ function changeItemsPerPage() {
 function openNewClientModal() {
     document.getElementById('newClientForm').reset();
     document.getElementById('newClientVip').value = 'false';
+
+    // Проверяем предзаполненные данные
+    checkPreselectedClient();
+
     openModal('newClientModal');
+}
+
+// Проверка предзаполненного клиента из localStorage
+function checkPreselectedClient() {
+    const preselectedClient = localStorage.getItem('preselectedClient');
+    if (preselectedClient) {
+        try {
+            const clientData = JSON.parse(preselectedClient);
+
+            // Заполняем форму, если модальное окно открыто
+            const nameField = document.getElementById('newClientName');
+            const phoneField = document.getElementById('newClientPhone');
+            const emailField = document.getElementById('newClientEmail');
+
+            if (nameField && clientData.name) {
+                nameField.value = clientData.name;
+            }
+            if (phoneField && clientData.phone) {
+                phoneField.value = clientData.phone;
+            }
+            if (emailField && clientData.email) {
+                emailField.value = clientData.email;
+            }
+
+            // Очищаем данные
+            localStorage.removeItem('preselectedClient');
+        } catch (error) {
+            console.error('❌ Ошибка парсинга предзаполненного клиента:', error);
+            localStorage.removeItem('preselectedClient');
+        }
+    }
 }
 
 // Открытие детальной информации о клиенте
@@ -773,6 +819,11 @@ function createRequestForClient(clientId) {
 
 // Экспорт клиентов
 function exportClients() {
+    if (filteredClients.length === 0) {
+        showNotification('Нет данных для экспорта', 'error');
+        return;
+    }
+
     const csvContent = [
         ['ID', 'Имя', 'Телефон', 'Email', 'Адрес', 'VIP', 'Всего заявок', 'Потрачено', 'Дата регистрации'],
         ...filteredClients.map(c => [
@@ -793,6 +844,8 @@ function exportClients() {
     link.href = URL.createObjectURL(blob);
     link.download = `клиенты_${new Date().toISOString().split('T')[0]}.csv`;
     link.click();
+
+    showNotification(`Экспортировано ${filteredClients.length} клиентов`, 'success');
 }
 
 // Вспомогательные функции
@@ -809,3 +862,262 @@ function truncateText(text, maxLength) {
     if (!text) return '';
     return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
 }
+
+function getStatusClass(status) {
+    const statusMap = {
+        'Принята': 'status-new',
+        'Диагностика': 'status-in-progress',
+        'Ожидание запчастей': 'status-pending',
+        'В ремонте': 'status-in-progress',
+        'Тестирование': 'status-in-progress',
+        'Готова к выдаче': 'status-completed',
+        'Выдана': 'status-completed'
+    };
+    return statusMap[status] || 'status-new';
+}
+
+// Управление модальными окнами
+function openModal(modalId) {
+    document.getElementById(modalId).style.display = 'flex';
+    document.body.style.overflow = 'hidden'; // Предотвращаем прокрутку фона
+}
+
+function closeModal(modalId) {
+    document.getElementById(modalId).style.display = 'none';
+    document.body.style.overflow = 'auto'; // Восстанавливаем прокрутку
+}
+
+// Показ уведомлений
+function showNotification(message, type = 'success') {
+    // Удаляем старые уведомления
+    document.querySelectorAll('.notification').forEach(el => el.remove());
+
+    const notification = document.createElement('div');
+    notification.className = `notification ${type}`;
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 1rem 1.5rem;
+        background: ${type === 'error' ? 'rgba(255, 0, 0, 0.2)' : 'rgba(0, 255, 0, 0.2)'};
+        border: 1px solid ${type === 'error' ? 'rgba(255, 0, 0, 0.3)' : 'rgba(0, 255, 0, 0.3)'};
+        color: ${type === 'error' ? '#ff4444' : '#00ff00'};
+        border-radius: 12px;
+        z-index: 3000;
+        animation: slideInRight 0.4s ease-out;
+        max-width: 400px;
+        word-wrap: break-word;
+        backdrop-filter: blur(10px);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    `;
+    notification.textContent = message;
+
+    document.body.appendChild(notification);
+
+    setTimeout(() => {
+        notification.style.animation = 'slideOutRight 0.4s ease-out';
+        setTimeout(() => notification.remove(), 400);
+    }, 4000);
+}
+
+// Переключение sidebar для мобильных
+function toggleSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    if (sidebar) {
+        sidebar.classList.toggle('active');
+    }
+}
+
+// Выход из системы
+function logout() {
+    console.log('🚪 Выход из системы');
+    window.location.href = '/logout';
+}
+
+// Настройка обработчиков выхода
+function setupLogoutHandlers() {
+    document.querySelectorAll('a[href="#logout"]').forEach(link => {
+        link.addEventListener('click', function(e) {
+            e.preventDefault();
+            logout();
+        });
+    });
+}
+
+// Закрытие модальных окон по клику вне их
+window.onclick = function(event) {
+    if (event.target.classList.contains('modal')) {
+        event.target.style.display = 'none';
+        document.body.style.overflow = 'auto';
+    }
+}
+
+// Обработка клавиши Escape для закрытия модальных окон
+document.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape') {
+        const openModals = document.querySelectorAll('.modal[style*="flex"]');
+        openModals.forEach(modal => {
+            modal.style.display = 'none';
+        });
+        document.body.style.overflow = 'auto';
+    }
+});
+
+// Добавим стили для анимации уведомлений
+const style = document.createElement('style');
+style.textContent = `
+    @keyframes slideInRight {
+        from {
+            transform: translateX(100%);
+            opacity: 0;
+        }
+        to {
+            transform: translateX(0);
+            opacity: 1;
+        }
+    }
+
+    @keyframes slideOutRight {
+        from {
+            transform: translateX(0);
+            opacity: 1;
+        }
+        to {
+            transform: translateX(100%);
+            opacity: 0;
+        }
+    }
+
+    /* Дополнительные стили для карточек клиентов */
+    .client-card {
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+
+    .client-card:hover {
+        transform: translateY(-8px);
+        box-shadow: 0 15px 40px rgba(0, 255, 255, 0.3);
+    }
+
+    .client-actions button {
+        transition: all 0.3s ease;
+    }
+
+    .client-actions button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(0, 255, 255, 0.3);
+    }
+
+    /* Стили для формы */
+    .form-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1rem;
+    }
+
+    .info-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    .info-item {
+        padding: 1rem;
+        background: rgba(0, 255, 255, 0.05);
+        border-radius: 8px;
+        border: 1px solid rgba(0, 255, 255, 0.1);
+    }
+
+    .info-label {
+        font-size: 0.85rem;
+        color: rgba(255, 255, 255, 0.6);
+        margin-bottom: 0.25rem;
+    }
+
+    .info-value {
+        font-size: 1.1rem;
+        color: #00ffff;
+        word-break: break-all;
+    }
+
+    /* Адаптивность */
+    @media (max-width: 768px) {
+        .clients-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .filters-section > div {
+            grid-template-columns: 1fr;
+        }
+
+        .form-row {
+            grid-template-columns: 1fr;
+        }
+
+        .info-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .client-stats {
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+        }
+    }
+
+    @media (max-width: 480px) {
+        .modal-content {
+            padding: 1rem;
+            margin: 0.5rem;
+        }
+
+        .client-card {
+            padding: 1rem;
+        }
+
+        .client-actions {
+            flex-direction: column;
+        }
+    }
+
+    /* Стили для загрузки */
+    .loading-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.7);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+    }
+
+    .loading-content {
+        background: rgba(26, 26, 46, 0.9);
+        padding: 2rem;
+        border-radius: 12px;
+        border: 1px solid rgba(0, 255, 255, 0.3);
+        text-align: center;
+        backdrop-filter: blur(10px);
+    }
+
+    .loading-spinner {
+        width: 40px;
+        height: 40px;
+        border: 3px solid rgba(0, 255, 255, 0.3);
+        border-top: 3px solid #00ffff;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 1rem;
+    }
+
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+`;
+document.head.appendChild(style);
+
+console.log('✅ Полный скрипт управления клиентами загружен и готов к работе');

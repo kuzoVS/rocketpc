@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request, HTTPException, Depends
+from fastapi import FastAPI, Request, HTTPException, Depends, Query
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
@@ -6,8 +6,8 @@ from fastapi.templating import Jinja2Templates
 from contextlib import asynccontextmanager
 import uvicorn
 import os
-from typing import Dict
-
+from typing import Dict, Optional
+from app.routers import clients
 from app.routers import main, requests, auth, dashboard
 from app.config import settings
 from app.database_pg import db
@@ -65,6 +65,7 @@ templates = Jinja2Templates(directory="templates")
 app.include_router(main.router)
 app.include_router(requests.router, prefix="/api")
 app.include_router(auth.router)
+app.include_router(clients.router, prefix="/api")
 
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard_page(request: Request):
@@ -211,7 +212,179 @@ async def dashboard_api_stats(token_data: Dict = Depends(verify_token_from_cooki
         }
 
 
+# Добавьте эти роуты в main.py после существующих роутов
 
+from app.routers import clients
+
+# Подключаем роуты клиентов
+app.include_router(clients.router, prefix="/api")
+
+
+# Или если роуты clients еще не импортированы, добавьте эти API методы напрямую:
+
+@app.get("/api/clients")
+async def get_clients_api(token_data: Dict = Depends(verify_token_from_cookie)):
+    """API для получения всех клиентов"""
+    try:
+        clients = await db.get_all_clients(include_stats=True)
+        return clients
+    except Exception as e:
+        print(f"❌ Ошибка получения клиентов: {e}")
+        raise HTTPException(status_code=500, detail="Ошибка получения данных")
+
+
+@app.get("/api/clients/statistics")
+async def get_clients_statistics_api(token_data: Dict = Depends(verify_token_from_cookie)):
+    """API для получения статистики клиентов"""
+    try:
+        stats = await db.get_client_statistics()
+        return stats
+    except Exception as e:
+        print(f"❌ Ошибка получения статистики: {e}")
+        raise HTTPException(status_code=500, detail="Ошибка получения статистики")
+
+
+@app.get("/api/clients/{client_id}")
+async def get_client_api(client_id: int, token_data: Dict = Depends(verify_token_from_cookie)):
+    """API для получения клиента по ID"""
+    try:
+        client = await db.get_client_by_id(client_id)
+        if not client:
+            raise HTTPException(status_code=404, detail="Клиент не найден")
+
+        # Получаем заявки клиента
+        requests = await db.get_client_requests(client_id)
+        client['requests'] = requests
+
+        # Получаем типы устройств
+        devices = await db.get_client_device_types(client_id)
+        client['device_types'] = devices
+
+        return client
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Ошибка получения клиента: {e}")
+        raise HTTPException(status_code=500, detail="Ошибка получения данных")
+
+
+@app.get("/api/clients/{client_id}/requests")
+async def get_client_requests_api(
+        client_id: int,
+        limit: Optional[int] = Query(None, description="Лимит заявок"),
+        token_data: Dict = Depends(verify_token_from_cookie)
+):
+    """API для получения заявок клиента"""
+    try:
+        requests = await db.get_client_requests(client_id, limit)
+        return requests
+    except Exception as e:
+        print(f"❌ Ошибка получения заявок клиента: {e}")
+        raise HTTPException(status_code=500, detail="Ошибка получения данных")
+
+
+@app.post("/api/clients")
+async def create_client_api(
+        client_data: dict,
+        token_data: Dict = Depends(require_role_cookie(["admin", "director", "manager"]))
+):
+    """API для создания нового клиента"""
+    try:
+        # Валидация данных
+        if not client_data.get('full_name') or len(client_data['full_name'].strip()) < 2:
+            raise HTTPException(status_code=400, detail="Имя клиента должно содержать минимум 2 символа")
+
+        if not client_data.get('phone') or len(client_data['phone'].strip()) < 10:
+            raise HTTPException(status_code=400, detail="Телефон должен содержать минимум 10 символов")
+
+        client_id = await db.create_client(
+            full_name=client_data['full_name'].strip(),
+            phone=client_data['phone'].strip(),
+            email=client_data.get('email', '').strip() or None,
+            address=client_data.get('address', '').strip() or None
+        )
+
+        # Обновляем дополнительные поля если есть
+        if client_data.get('is_vip') or client_data.get('notes'):
+            update_data = {}
+            if client_data.get('is_vip'):
+                update_data['is_vip'] = bool(client_data['is_vip'])
+            if client_data.get('notes'):
+                update_data['notes'] = client_data['notes'].strip()
+
+            if update_data:
+                await db.update_client(client_id, update_data)
+
+        return {"id": client_id, "message": "Клиент создан успешно"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Ошибка создания клиента: {e}")
+        raise HTTPException(status_code=500, detail="Ошибка создания клиента")
+
+
+@app.put("/api/clients/{client_id}")
+async def update_client_api(
+        client_id: int,
+        client_data: dict,
+        token_data: Dict = Depends(verify_token_from_cookie)
+):
+    """API для обновления информации о клиенте"""
+    try:
+        # Проверяем существование клиента
+        existing_client = await db.get_client_by_id(client_id)
+        if not existing_client:
+            raise HTTPException(status_code=404, detail="Клиент не найден")
+
+        # Подготавливаем данные для обновления
+        update_data = {}
+        for field, value in client_data.items():
+            if value is not None and str(value).strip():
+                if field in ['full_name', 'phone', 'email', 'address', 'notes']:
+                    update_data[field] = str(value).strip()
+                elif field == 'is_vip':
+                    update_data[field] = bool(value)
+
+        if not update_data:
+            return {"message": "Нет данных для обновления"}
+
+        success = await db.update_client(client_id, update_data)
+        if not success:
+            raise HTTPException(status_code=400, detail="Ошибка обновления клиента")
+
+        return {"message": "Клиент обновлен успешно"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Ошибка обновления клиента: {e}")
+        raise HTTPException(status_code=500, detail="Ошибка обновления клиента")
+
+
+@app.delete("/api/clients/{client_id}")
+async def delete_client_api(
+        client_id: int,
+        token_data: Dict = Depends(require_role_cookie(["admin", "director"]))
+):
+    """API для удаления клиента"""
+    try:
+        # Проверяем существование клиента
+        existing_client = await db.get_client_by_id(client_id)
+        if not existing_client:
+            raise HTTPException(status_code=404, detail="Клиент не найден")
+
+        success = await db.delete_client(client_id)
+        if not success:
+            raise HTTPException(
+                status_code=400,
+                detail="Невозможно удалить клиента с активными заявками"
+            )
+
+        return {"message": "Клиент удален успешно"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Ошибка удаления клиента: {e}")
+        raise HTTPException(status_code=500, detail="Ошибка удаления клиента")
 
 
 @app.put("/dashboard/api/requests/{request_id}/status")
