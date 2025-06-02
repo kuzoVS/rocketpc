@@ -1400,42 +1400,8 @@ class PostgreSQLDatabase:
             return all_events
 
     async def update_client_info(self, client_id: int, client_data: dict) -> bool:
-        """Обновление информации о клиенте"""
-        async with self.pool.acquire() as conn:
-            try:
-                set_clauses = []
-                values = []
-                param_count = 1
-
-                updatable_fields = {
-                    'full_name': 'full_name',
-                    'phone': 'phone',
-                    'email': 'email',
-                    'address': 'address'
-                }
-
-                for field_name, db_field in updatable_fields.items():
-                    if field_name in client_data and client_data[field_name] is not None:
-                        set_clauses.append(f"{db_field} = ${param_count}")
-                        values.append(client_data[field_name])
-                        param_count += 1
-
-                if not set_clauses:
-                    return True
-
-                query = f'''
-                    UPDATE clients 
-                    SET {', '.join(set_clauses)}
-                    WHERE id = ${param_count}
-                '''
-                values.append(client_id)
-
-                await conn.execute(query, *values)
-                return True
-
-            except Exception as e:
-                print(f"❌ Ошибка обновления клиента: {e}")
-                return False
+        """Обновление информации о клиенте (алиас для update_client)"""
+        return await self.update_client(client_id, client_data)
 
 # Создание глобального экземпляра
 db = PostgreSQLDatabase()

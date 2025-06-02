@@ -69,8 +69,10 @@ def set_auth_cookie(response: Response, token: str):
         value=token,
         httponly=True,
         max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        secure=False,  # Поставить True в проде
-        samesite="lax"
+        secure=False,  # Поставить True в проде для HTTPS
+        samesite="lax",
+        domain=None,  # Убираем domain, чтобы работало на localhost
+        path="/"      # Устанавливаем для всего сайта
     )
 
 def decode_token_from_cookie(request: Request) -> dict:
