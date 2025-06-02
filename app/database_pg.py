@@ -23,6 +23,8 @@ class PostgreSQLDatabase:
         digits = ''.join(filter(str.isdigit, phone))
         if len(digits) == 11 and digits.startswith('8'):
             digits = '7' + digits[1:]
+        elif len(digits) == 10:
+            digits = '7' + digits
         return digits
 
     def verify_password(self, plain_password: str, hashed_password: str) -> bool:
@@ -821,25 +823,45 @@ class PostgreSQLDatabase:
         normalized_phone = self.normalize_phone(phone)
 
         async with self.pool.acquire() as conn:
+            # Проверяем, не существует ли уже клиент с таким телефоном
+            existing_client = await conn.fetchval('''
+                SELECT id FROM clients WHERE phone = $1
+            ''', normalized_phone)
+
+            if existing_client:
+                print(f"⚠️ Клиент с телефоном {normalized_phone} уже существует (ID: {existing_client})")
+                # Можно обновить информацию или вернуть существующего
+                await conn.execute('''
+                    UPDATE clients 
+                    SET full_name = $1, email = COALESCE($2, email), address = COALESCE($3, address)
+                    WHERE id = $4
+                ''', full_name, email, address, existing_client)
+                return existing_client
+
             client_id = await conn.fetchval('''
                 INSERT INTO clients (full_name, phone, email, address)
                 VALUES ($1, $2, $3, $4)
                 RETURNING id
             ''', full_name, normalized_phone, email, address)
 
+            print(f"✅ Создан новый клиент ID: {client_id} с телефоном: {normalized_phone}")
             return client_id
 
     async def search_clients_by_phone(self, phone_token: str):
+        """Поиск клиентов по номеру телефона (по части номера)"""
+        # Нормализуем поисковый запрос
+        clean_token = ''.join(filter(str.isdigit, phone_token))
+
         query = """
             SELECT id, full_name, phone, email
             FROM clients
-            WHERE regexp_replace(phone, '\\D', '', 'g') ILIKE '%' || $1 || '%'
+            WHERE phone LIKE '%' || $1 || '%'
             ORDER BY id DESC
             LIMIT 10;
         """
         async with self.pool.acquire() as conn:
-            rows = await conn.fetch(query, phone_token)
-            print([dict(row) for row in rows])
+            rows = await conn.fetch(query, clean_token)
+            print(f"🔍 Поиск клиентов по телефону '{clean_token}': найдено {len(rows)}")
             return [dict(row) for row in rows]
 
     async def get_or_create_client(self, full_name: str, phone: str, email: str = None) -> int:
@@ -850,19 +872,29 @@ class PostgreSQLDatabase:
             # Ищем клиента по нормализованному телефону
             client_id = await conn.fetchval('''
                 SELECT id FROM clients
-                WHERE REGEXP_REPLACE(phone, '\\D', '', 'g') = $1
+                WHERE phone = $1
             ''', normalized_phone)
 
             if client_id:
+                print(f"👤 Найден существующий клиент ID: {client_id} для телефона: {normalized_phone}")
+
+                # Обновляем информацию если она изменилась
+                await conn.execute('''
+                    UPDATE clients 
+                    SET full_name = $1, email = COALESCE($2, email), total_repairs = total_repairs + 1
+                    WHERE id = $3
+                ''', full_name, email, client_id)
+
                 return client_id
 
-            # Создаём нового клиента
+            # Создаём нового клиента с нормализованным телефоном
             client_id = await conn.fetchval('''
-                INSERT INTO clients (full_name, phone, email)
-                VALUES ($1, $2, $3)
+                INSERT INTO clients (full_name, phone, email, total_repairs)
+                VALUES ($1, $2, $3, 1)
                 RETURNING id
             ''', full_name, normalized_phone, email)
 
+            print(f"➕ Создан новый клиент ID: {client_id} для телефона: {normalized_phone}")
             return client_id
 
     # Методы для работы с заявками
@@ -1483,21 +1515,6 @@ class PostgreSQLDatabase:
                 print(f"❌ Ошибка обновления статуса пользователя: {e}")
                 return False
 
-    async def delete_user(self, user_id: int) -> bool:
-        """Удаление пользователя (помечается как неактивный)"""
-        async with self.pool.acquire() as conn:
-            try:
-                # Помечаем как неактивного вместо удаления
-                await conn.execute('''
-                    UPDATE users 
-                    SET is_active = FALSE
-                    WHERE id = $1
-                ''', user_id)
-                return True
-            except Exception as e:
-                print(f"❌ Ошибка удаления пользователя: {e}")
-                return False
-
     async def get_user_statistics(self) -> Dict:
         """ИСПРАВЛЕННОЕ получение статистики пользователей"""
         async with self.pool.acquire() as conn:
@@ -1702,10 +1719,10 @@ class PostgreSQLDatabase:
                 return False
 
     async def delete_user(self, user_id: int) -> bool:
-        """ИСПРАВЛЕННОЕ удаление пользователя (помечается как неактивный)"""
+        """ПОЛНОЕ удаление пользователя из базы данных"""
         async with self.pool.acquire() as conn:
             try:
-                print(f"🗑️ Попытка удаления пользователя {user_id} в БД")
+                print(f"🗑️ Полное удаление пользователя {user_id} из БД")
 
                 # Проверяем существование пользователя
                 user_exists = await conn.fetchval('SELECT id FROM users WHERE id = $1', user_id)
@@ -1713,25 +1730,81 @@ class PostgreSQLDatabase:
                     print(f"❌ Пользователь {user_id} не найден в БД")
                     return False
 
-                # Помечаем как неактивного вместо полного удаления
-                result = await conn.execute('''
-                    UPDATE users 
-                    SET is_active = FALSE
-                    WHERE id = $1
-                ''', user_id)
+                # Начинаем транзакцию для безопасного удаления
+                async with conn.transaction():
+                    # 1. Обновляем связанные таблицы, устанавливая NULL для внешних ключей
 
-                print(f"📝 Результат SQL: {result}")
+                    # Обновляем repair_requests - убираем ссылки на удаляемого пользователя
+                    await conn.execute('''
+                        UPDATE repair_requests 
+                        SET assigned_master_id = NULL 
+                        WHERE assigned_master_id = $1
+                    ''', user_id)
 
-                # Проверяем результат
-                if result == 'UPDATE 1':
-                    print(f"✅ Пользователь {user_id} успешно деактивирован")
-                    return True
-                else:
-                    print(f"❌ Не удалось деактивировать пользователя {user_id}")
-                    return False
+                    await conn.execute('''
+                        UPDATE repair_requests 
+                        SET assigned_by_id = NULL 
+                        WHERE assigned_by_id = $1
+                    ''', user_id)
+
+                    await conn.execute('''
+                        UPDATE repair_requests 
+                        SET created_by_id = NULL 
+                        WHERE created_by_id = $1
+                    ''', user_id)
+
+                    # Обновляем status_history - убираем ссылки на пользователя
+                    await conn.execute('''
+                        UPDATE status_history 
+                        SET changed_by = NULL 
+                        WHERE changed_by = $1
+                    ''', user_id)
+
+                    # Обновляем assignment_history - убираем ссылки на пользователя
+                    await conn.execute('''
+                        UPDATE assignment_history 
+                        SET master_id = NULL 
+                        WHERE master_id = $1
+                    ''', user_id)
+
+                    await conn.execute('''
+                        UPDATE assignment_history 
+                        SET assigned_by = NULL 
+                        WHERE assigned_by = $1
+                    ''', user_id)
+
+                    # 2. Удаляем связанные записи где пользователь является владельцем
+
+                    # Удаляем навыки мастера (если это мастер)
+                    await conn.execute('''
+                        DELETE FROM master_skills 
+                        WHERE master_id = $1
+                    ''', user_id)
+
+                    # Удаляем расписание мастера (если есть такая таблица)
+                    await conn.execute('''
+                        DELETE FROM master_schedule 
+                        WHERE master_id = $1
+                    ''', user_id)
+
+                    # 3. Наконец, удаляем самого пользователя
+                    result = await conn.execute('''
+                        DELETE FROM users 
+                        WHERE id = $1
+                    ''', user_id)
+
+                    print(f"📝 Результат SQL: {result}")
+
+                    # Проверяем результат
+                    if result == 'DELETE 1':
+                        print(f"✅ Пользователь {user_id} полностью удален из БД")
+                        return True
+                    else:
+                        print(f"❌ Не удалось удалить пользователя {user_id}")
+                        return False
 
             except Exception as e:
-                print(f"❌ Ошибка удаления пользователя в БД: {e}")
+                print(f"❌ Ошибка полного удаления пользователя из БД: {e}")
                 import traceback
                 traceback.print_exc()
                 return False
