@@ -220,7 +220,6 @@ from app.routers import clients
 # Подключаем роуты клиентов
 app.include_router(clients.router, prefix="/api")
 
-
 # Или если роуты clients еще не импортированы, добавьте эти API методы напрямую:
 
 @app.get("/api/clients")
@@ -244,8 +243,8 @@ async def get_clients_statistics_api(token_data: Dict = Depends(verify_token_fro
         print(f"✅ Статистика клиентов получена: {stats}")
         return stats
     except Exception as e:
-        print(f"❌ Ошибка получения статистики: {e}")
-        raise HTTPException(status_code=500, detail="Ошибка получения статистики")
+        print("⚠️ Ошибка при получении статистики:", repr(e))  # Добавили repr
+        raise HTTPException(status_code=500, detail="Внутренняя ошибка сервера")
 
 
 @app.get("/api/clients/{client_id}")

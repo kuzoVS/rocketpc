@@ -1543,3 +1543,17 @@ canvas:hover {
         font-size: 0.8rem;
     }
 }
+suggestionBox.style.cssText = `
+    position: fixed;
+    top: 200px;  /* временно! */
+    left: 200px;
+    z-index: 9999;
+    background: #222;
+    border: 1px solid #555;
+    border-radius: 8px;
+    color: white;
+    padding: 0.5rem;
+    max-height: 150px;
+    overflow-y: auto;
+    display: block; /* временно насильно включаем */
+`;

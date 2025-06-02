@@ -121,6 +121,7 @@ async function loadClientStatistics() {
         console.log('📊 Загружаем статистику клиентов...');
 
         const response = await fetch('/api/clients/statistics', {
+            method: 'GET',
             credentials: 'include'
         });
 
@@ -182,7 +183,7 @@ function filterAndDisplayClients() {
     });
 
     // Сортируем
-    sortClients();
+    sortFilteredClients(); // Изменено название функции
 
     // Отображаем
     currentPage = 1;
@@ -193,7 +194,7 @@ function filterAndDisplayClients() {
 }
 
 // Сортировка клиентов
-function sortClients() {
+function sortFilteredClients() {
     const sortBy = document.getElementById('sortBy').value;
 
     filteredClients.sort((a, b) => {
@@ -287,9 +288,6 @@ function createClientCard(client) {
                 </div>
             </div>
             <div class="client-actions">
-                <button class="btn btn-outline btn-sm" onclick="event.stopPropagation(); createRequestForClient(${client.id})">
-                    📝 Новая заявка
-                </button>
                 <button class="btn btn-outline btn-sm" onclick="event.stopPropagation(); openClientDetail(${client.id})">
                     👁️ Подробнее
                 </button>
@@ -374,6 +372,7 @@ function filterClients() {
 }
 
 function sortClients() {
+    // Эта функция вызывается из HTML при изменении select
     filterAndDisplayClients();
 }
 
@@ -801,10 +800,8 @@ async function deleteClient() {
 
 // Создание заявки для клиента
 function createRequestForClient(clientId) {
-    // Перенаправляем на страницу заявок с предзаполненным клиентом
     const client = allClients.find(c => c.id === clientId);
     if (client) {
-        // Сохраняем данные клиента в localStorage для предзаполнения
         localStorage.setItem('preselectedClient', JSON.stringify({
             id: client.id,
             name: client.full_name,
@@ -812,7 +809,6 @@ function createRequestForClient(clientId) {
             email: client.email
         }));
 
-        // Переходим на страницу заявок
         window.location.href = '/dashboard/requests';
     }
 }

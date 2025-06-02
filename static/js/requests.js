@@ -11,13 +11,11 @@ let currentActiveTab = 'basic';
 // Инициализация при загрузке страницы
 document.addEventListener('DOMContentLoaded', async function() {
     console.log('📄 Инициализация страницы заявок...');
-
+    setupPhoneAutocompleteRemote();
     // Показываем страницу
     document.getElementById('pageBody').style.display = 'block';
-
     // Загружаем информацию о пользователе
     loadUserInfo();
-
     // Загружаем заявки
     await loadRequests();
 
@@ -1037,6 +1035,101 @@ function showNotification(message, type = 'success') {
         setTimeout(() => notification.remove(), 400);
     }, 4000);
 }
+
+function setupPhoneAutocompleteRemote() {
+    const phoneInput = document.getElementById('clientPhone');
+    const nameInput = document.getElementById('clientName');
+    const emailInput = document.getElementById('clientEmail');
+
+    if (!phoneInput || !nameInput || !emailInput) {
+        console.warn('⛔ Не найдены input поля для автозаполнения');
+        return;
+    }
+
+    const suggestionBox = document.createElement('div');
+    suggestionBox.id = 'phoneSuggestions';
+    suggestionBox.style.cssText = `
+        position: absolute;
+        z-index: 999;
+        background: #222;
+        border: 1px solid #555;
+        border-radius: 8px;
+        color: white;
+        padding: 0.5rem;
+        max-height: 150px;
+        overflow-y: auto;
+        display: none;
+    `;
+    document.body.appendChild(suggestionBox);
+
+    let debounceTimer;
+
+    phoneInput.addEventListener('input', () => {
+        const query = phoneInput.value.trim().replace(/\D/g, '');
+
+        if (debounceTimer) clearTimeout(debounceTimer);
+
+        if (query.length < 3) {
+            suggestionBox.style.display = 'none';
+            return;
+        }
+
+        debounceTimer = setTimeout(async () => {
+            try {
+                const res = await fetch(`/api/clients/search?phone=${query}`, {
+                    credentials: 'include'
+                });
+
+                if (!res.ok) {
+                    suggestionBox.style.display = 'none';
+                    return;
+                }
+
+                const clients = await res.json();
+                console.log('🔍 Найдено клиентов:', clients);
+
+                if (!Array.isArray(clients) || clients.length === 0) {
+                    suggestionBox.style.display = 'none';
+                    return;
+                }
+
+                suggestionBox.innerHTML = '';
+                clients.forEach(c => {
+                    const item = document.createElement('div');
+                    item.style.padding = '4px 8px';
+                    item.style.cursor = 'pointer';
+                    item.innerHTML = `<strong>${c.phone}</strong> – ${c.full_name}`;
+
+                    item.addEventListener('mouseenter', () => item.style.background = '#333');
+                    item.addEventListener('mouseleave', () => item.style.background = 'transparent');
+                    item.addEventListener('click', () => {
+                        phoneInput.value = c.phone;
+                        nameInput.value = c.full_name;
+                        emailInput.value = c.email || '';
+                        suggestionBox.style.display = 'none';
+                    });
+
+                    suggestionBox.appendChild(item);
+                });
+
+                const rect = phoneInput.getBoundingClientRect();
+                suggestionBox.style.top = `${rect.bottom + window.scrollY}px`;
+                suggestionBox.style.left = `${rect.left + window.scrollX}px`;
+                suggestionBox.style.width = `${rect.width}px`;
+                suggestionBox.style.display = 'block';
+
+            } catch (err) {
+                console.error('❌ Ошибка автоподстановки:', err);
+                suggestionBox.style.display = 'none';
+            }
+        }, 300);
+    });
+
+    phoneInput.addEventListener('blur', () => {
+        setTimeout(() => suggestionBox.style.display = 'none', 200);
+    });
+}
+
 
 // Экспорт заявок
 function exportRequests() {

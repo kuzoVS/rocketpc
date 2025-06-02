@@ -18,6 +18,13 @@ class PostgreSQLDatabase:
         password_hash = hashlib.pbkdf2_hmac('sha256', password.encode(), salt.encode(), 100000)
         return password_hash.hex() + ':' + salt
 
+    def normalize_phone(self, phone: str) -> str:
+        """Нормализация телефона: удаляет все символы кроме цифр и приводит к формату 7XXXXXXXXXX"""
+        digits = ''.join(filter(str.isdigit, phone))
+        if len(digits) == 11 and digits.startswith('8'):
+            digits = '7' + digits[1:]
+        return digits
+
     def verify_password(self, plain_password: str, hashed_password: str) -> bool:
         """Проверка пароля"""
         try:
@@ -256,7 +263,7 @@ class PostgreSQLDatabase:
 
     # Добавьте эти методы в app/database_pg.py в класс PostgreSQLDatabase
     async def get_all_clients(self, include_stats: bool = True) -> List[Dict]:
-        """Получение всех клиентов с статистикой"""
+        """Получение всех клиентов с полной статистикой"""
         async with self.pool.acquire() as conn:
             if include_stats:
                 clients = await conn.fetch('''
@@ -270,13 +277,14 @@ class PostgreSQLDatabase:
                         c.total_repairs,
                         c.is_vip,
                         c.notes,
-                        COUNT(rr.id) as active_requests,
-                        COUNT(CASE WHEN rr.status = 'Выдана' THEN 1 END) as completed_requests,
+                        COUNT(rr.id) FILTER (WHERE rr.is_archived = FALSE) as total_requests,
+                        COUNT(rr.id) FILTER (WHERE rr.status != 'Выдана' AND rr.is_archived = FALSE) as active_requests,
+                        COUNT(rr.id) FILTER (WHERE rr.status = 'Выдана' AND rr.is_archived = FALSE) as completed_requests,
                         SUM(CASE WHEN rr.final_cost IS NOT NULL THEN rr.final_cost ELSE 0 END) as total_spent,
                         MAX(rr.created_at) as last_request_date,
                         AVG(CASE WHEN rr.final_cost IS NOT NULL THEN rr.final_cost END) as avg_cost
                     FROM clients c
-                    LEFT JOIN repair_requests rr ON c.id = rr.client_id AND rr.is_archived = FALSE
+                    LEFT JOIN repair_requests rr ON c.id = rr.client_id
                     GROUP BY c.id
                     ORDER BY c.created_at DESC
                 ''')
@@ -295,15 +303,15 @@ class PostgreSQLDatabase:
             client = await conn.fetchrow('''
                 SELECT 
                     c.*,
-                    COUNT(rr.id) as total_requests,
-                    COUNT(CASE WHEN rr.status != 'Выдана' AND rr.is_archived = FALSE THEN 1 END) as active_requests,
-                    COUNT(CASE WHEN rr.status = 'Выдана' THEN 1 END) as completed_requests,
+                    COUNT(rr.id) FILTER (WHERE rr.is_archived = FALSE) as total_requests,
+                    COUNT(rr.id) FILTER (WHERE rr.status != 'Выдана' AND rr.is_archived = FALSE) as active_requests,
+                    COUNT(rr.id) FILTER (WHERE rr.status = 'Выдана' AND rr.is_archived = FALSE) as completed_requests,
                     SUM(CASE WHEN rr.final_cost IS NOT NULL THEN rr.final_cost ELSE 0 END) as total_spent,
                     AVG(CASE WHEN rr.final_cost IS NOT NULL THEN rr.final_cost END) as avg_cost,
                     MAX(rr.created_at) as last_request_date,
                     MIN(rr.created_at) as first_request_date
                 FROM clients c
-                LEFT JOIN repair_requests rr ON c.id = rr.client_id AND rr.is_archived = FALSE
+                LEFT JOIN repair_requests rr ON c.id = rr.client_id
                 WHERE c.id = $1
                 GROUP BY c.id
             ''', client_id)
@@ -330,7 +338,7 @@ class PostgreSQLDatabase:
             return [dict(request) for request in requests]
 
     async def search_clients(self, search_term: str) -> List[Dict]:
-        """Поиск клиентов по имени, телефону или email"""
+        """Поиск клиентов по имени, телефону или email с полной статистикой"""
         async with self.pool.acquire() as conn:
             clients = await conn.fetch('''
                 SELECT 
@@ -342,10 +350,12 @@ class PostgreSQLDatabase:
                     c.created_at,
                     c.total_repairs,
                     c.is_vip,
-                    COUNT(rr.id) as active_requests
+                    c.notes,
+                    COUNT(rr.id) FILTER (WHERE rr.is_archived = FALSE) as total_requests,
+                    COUNT(rr.id) FILTER (WHERE rr.status != 'Выдана' AND rr.is_archived = FALSE) as active_requests,
+                    COUNT(rr.id) FILTER (WHERE rr.status = 'Выдана' AND rr.is_archived = FALSE) as completed_requests
                 FROM clients c
-                LEFT JOIN repair_requests rr ON c.id = rr.client_id 
-                    AND rr.status != 'Выдана' AND rr.is_archived = FALSE
+                LEFT JOIN repair_requests rr ON c.id = rr.client_id
                 WHERE 
                     c.full_name ILIKE $1 OR 
                     c.phone ILIKE $1 OR 
@@ -355,6 +365,7 @@ class PostgreSQLDatabase:
             ''', f'%{search_term}%')
 
             return [dict(client) for client in clients]
+
 
     async def update_client(self, client_id: int, client_data: dict) -> bool:
         """Обновление информации о клиенте"""
@@ -465,7 +476,7 @@ class PostgreSQLDatabase:
                     COUNT(*) as total_clients,
                     COUNT(CASE WHEN is_vip = TRUE THEN 1 END) as vip_clients,
                     COUNT(CASE WHEN created_at >= CURRENT_DATE - INTERVAL '30 days' THEN 1 END) as new_clients_month,
-                    AVG(total_repairs) as avg_repairs_per_client
+                    AVG(total_repairs::float) as avg_repairs_per_client
                 FROM clients
             ''')
 
@@ -785,33 +796,51 @@ class PostgreSQLDatabase:
 
     # Методы для работы с клиентами
     async def create_client(self, full_name: str, phone: str, email: str = None, address: str = None) -> int:
-        """Создание нового клиента"""
+        """Создание нового клиента с нормализацией телефона"""
+        normalized_phone = self.normalize_phone(phone)
+
         async with self.pool.acquire() as conn:
             client_id = await conn.fetchval('''
                 INSERT INTO clients (full_name, phone, email, address)
                 VALUES ($1, $2, $3, $4)
                 RETURNING id
-            ''', full_name, phone, email, address)
+            ''', full_name, normalized_phone, email, address)
 
             return client_id
 
-    async def get_or_create_client(self, full_name: str, phone: str, email: str = None) -> int:
-        """Получение или создание клиента"""
+    async def search_clients_by_phone(self, phone_token: str):
+        query = """
+            SELECT id, full_name, phone, email
+            FROM clients
+            WHERE regexp_replace(phone, '\\D', '', 'g') ILIKE '%' || $1 || '%'
+            ORDER BY id DESC
+            LIMIT 10;
+        """
         async with self.pool.acquire() as conn:
-            # Пытаемся найти существующего клиента по телефону
+            rows = await conn.fetch(query, phone_token)
+            print([dict(row) for row in rows])
+            return [dict(row) for row in rows]
+
+    async def get_or_create_client(self, full_name: str, phone: str, email: str = None) -> int:
+        """Получение или создание клиента с нормализацией телефона"""
+        normalized_phone = self.normalize_phone(phone)
+
+        async with self.pool.acquire() as conn:
+            # Ищем клиента по нормализованному телефону
             client_id = await conn.fetchval('''
-                SELECT id FROM clients WHERE phone = $1
-            ''', phone)
+                SELECT id FROM clients
+                WHERE REGEXP_REPLACE(phone, '\\D', '', 'g') = $1
+            ''', normalized_phone)
 
             if client_id:
                 return client_id
 
-            # Создаем нового клиента
+            # Создаём нового клиента
             client_id = await conn.fetchval('''
                 INSERT INTO clients (full_name, phone, email)
                 VALUES ($1, $2, $3)
                 RETURNING id
-            ''', full_name, phone, email)
+            ''', full_name, normalized_phone, email)
 
             return client_id
 

@@ -37,6 +37,7 @@ def verify_token_from_cookie(request: Request) -> Dict:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Не авторизован")
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        print("🧾 PAYLOAD из cookie:", payload)
         user_id = payload.get("sub")
         if user_id is None:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Недействительный токен")
@@ -44,9 +45,12 @@ def verify_token_from_cookie(request: Request) -> Dict:
     except JWTError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Недействительный токен")
 
+
+
 def require_role(required_roles: list):
     """Проверка ролей для API через Authorization"""
     def role_checker(token_data: Dict = Depends(verify_token)):
+        print("🛂 Проверка роли:", token_data.get("role"))
         user_role = token_data.get("role")
         if user_role not in required_roles:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Недостаточно прав доступа")
@@ -56,6 +60,7 @@ def require_role(required_roles: list):
 def require_role_cookie(required_roles: list):
     """Проверка ролей через cookie (для HTML страниц)"""
     def role_checker(token_data: Dict = Depends(verify_token_from_cookie)):
+        print("🛂 Проверка роли:", token_data.get("role"))
         user_role = token_data.get("role")
         if user_role not in required_roles:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Недостаточно прав доступа")

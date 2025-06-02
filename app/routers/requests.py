@@ -7,7 +7,7 @@ from datetime import date
 from app.models import RepairRequest, StatusResponse, StatusUpdate
 from app.database_pg import db
 from app.config import settings
-from app.auth import verify_token, require_role
+from app.auth import verify_token, require_role, verify_token_from_cookie
 
 router = APIRouter(prefix="/requests", tags=["requests"])
 
@@ -386,6 +386,20 @@ async def get_request_full(
         print(f"❌ Ошибка получения заявки: {e}")
         raise HTTPException(status_code=500, detail="Ошибка сервера")
 
+
+@router.get("/prefill/{client_id}")
+async def get_client_data_for_request(client_id: int, token_data: dict = Depends(verify_token_from_cookie)):
+    """Получение данных клиента для автозаполнения новой заявки"""
+    client = await db.get_client_by_id(client_id)
+    if not client:
+        raise HTTPException(status_code=404, detail="Клиент не найден")
+
+    return {
+        "full_name": client.get("full_name"),
+        "phone": client.get("phone"),
+        "email": client.get("email"),
+        "address": client.get("address")
+    }
 
 @router.put("/{request_id}/full")
 async def update_request_full(

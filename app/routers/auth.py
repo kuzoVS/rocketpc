@@ -31,8 +31,7 @@ async def login_post(request: Request, username: str = Form(...), password: str 
     token_data = {
         "sub": str(user["id"]),
         "username": user["username"],
-        "role": user["role"],
-        "exp": datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        "role": user["role"]
     }
 
     access_token = create_access_token(data=token_data)
