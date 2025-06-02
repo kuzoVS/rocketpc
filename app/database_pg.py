@@ -1865,5 +1865,37 @@ class PostgreSQLDatabase:
                 print(f"❌ Ошибка массового обновления статуса: {e}")
                 return 0
 
+    async def get_users_count_by_role(self) -> Dict:
+
+        """Получение количества пользователей по ролям"""
+
+        async with self.pool.acquire() as conn:
+
+            try:
+
+                roles_stats = await conn.fetch('''
+
+                    SELECT role, COUNT(*) as count
+
+                    FROM users 
+
+                    WHERE is_active = TRUE
+
+                    GROUP BY role
+
+                    ORDER BY count DESC
+
+                ''')
+
+                result = {role['role']: role['count'] for role in roles_stats}
+
+                return result
+
+            except Exception as e:
+
+                print(f"❌ Ошибка получения статистики по ролям: {e}")
+
+                return {}
+
 # Создание глобального экземпляра
 db = PostgreSQLDatabase()
