@@ -96,7 +96,7 @@ async function loadRequests() {
 
         if (response.ok) {
             allRequests = await response.json();
-            console.log(`✅ Загружено ${allRequests.length} заявок`);
+            console.log(`✅ Загружено api ${allRequests.length} заявок`);
 
             // Применяем фильтры
             filterRequests();

@@ -299,7 +299,7 @@ body {
 
 /* Charts Section */
 .charts-section {
-    display: grid;
+    display: block;
     grid-template-columns: 2fr 1fr;
     gap: 1.5rem;
     margin-bottom: 3rem;
@@ -1557,3 +1557,4 @@ suggestionBox.style.cssText = `
     overflow-y: auto;
     display: block; /* временно насильно включаем */
 `;
+

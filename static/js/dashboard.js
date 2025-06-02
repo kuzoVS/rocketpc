@@ -211,7 +211,7 @@ function renderDeviceStats(devices) {
 async function loadDashboardRequests() {
   try {
     console.log('🧾 Загружаем последние заявки...');
-    const res = await fetch("/dashboard/api/requests", {
+    const res = await fetch("/dashboard/api/recent-requests", {
       credentials: "include"
     });
 
@@ -740,7 +740,7 @@ async function loadCharts() {
 
         // Создаем графики
         createWeeklyChart(weeklyData);
-        createStatusChart(statsData.status_stats || []);
+        //createStatusChart(statsData.status_stats || []);
 
         // Анимация появления
         animateCharts();

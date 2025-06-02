@@ -182,11 +182,20 @@ async def get_dashboard_requests(token_data: Dict = Depends(verify_token_from_co
     try:
         all_requests = await db.get_all_repair_requests()
         recent_requests = sorted(all_requests, key=lambda r: r['created_at'], reverse=True)
-        return recent_requests[:5]
+        return recent_requests[:]
     except Exception as e:
         print(f"❌ Ошибка получения последних заявок: {e}")
         raise HTTPException(status_code=500, detail="Не удалось загрузить заявки")
 
+@app.get("/dashboard/api/recent-requests")
+async def get_dashboard_requests(token_data: Dict = Depends(verify_token_from_cookie)):
+    try:
+        all_requests = await db.get_all_repair_requests()
+        recent_requests = sorted(all_requests, key=lambda r: r['created_at'], reverse=True)
+        return recent_requests[:5]
+    except Exception as e:
+        print(f"❌ Ошибка получения последних заявок: {e}")
+        raise HTTPException(status_code=500, detail="Не удалось загрузить заявки")
 
 @app.get("/dashboard/api/stats")
 async def dashboard_api_stats(token_data: Dict = Depends(verify_token_from_cookie)):

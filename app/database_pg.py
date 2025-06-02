@@ -1025,32 +1025,49 @@ class PostgreSQLDatabase:
     async def get_detailed_statistics(self) -> Dict:
         """Получение детальной статистики для dashboard"""
         async with self.pool.acquire() as conn:
-            # Базовая статистика
+            # Общее количество заявок
             total_requests = await conn.fetchval('''
                 SELECT COUNT(*) FROM repair_requests WHERE is_archived = FALSE
             ''')
 
-            # Активные заявки (не завершенные)
+            # Активные заявки
             active_requests = await conn.fetchval('''
                 SELECT COUNT(*) FROM repair_requests 
-                WHERE status NOT IN ('Выдана') AND is_archived = FALSE
+                WHERE status != 'Выдана' AND is_archived = FALSE
             ''')
 
-            # Завершенные за текущий месяц
+            # Завершенные заявки за текущий месяц
             completed_this_month = await conn.fetchval('''
                 SELECT COUNT(*) FROM repair_requests 
                 WHERE status = 'Выдана' 
-                AND EXTRACT(MONTH FROM created_at) = EXTRACT(MONTH FROM CURRENT_DATE)
-                AND EXTRACT(YEAR FROM created_at) = EXTRACT(YEAR FROM CURRENT_DATE)
+                  AND DATE_TRUNC('month', actual_completion) = DATE_TRUNC('month', CURRENT_DATE)
             ''')
 
-            # Завершенные за прошлый месяц для расчета роста
+            # Завершенные заявки за прошлый месяц
             completed_last_month = await conn.fetchval('''
                 SELECT COUNT(*) FROM repair_requests 
                 WHERE status = 'Выдана' 
-                AND EXTRACT(MONTH FROM created_at) = EXTRACT(MONTH FROM CURRENT_DATE - INTERVAL '1 month')
-                AND EXTRACT(YEAR FROM created_at) = EXTRACT(YEAR FROM CURRENT_DATE - INTERVAL '1 month')
+                  AND DATE_TRUNC('month', actual_completion) = DATE_TRUNC('month', CURRENT_DATE - INTERVAL '1 month')
             ''')
+
+            # Расчет процента роста
+            growth_percentage = (
+                ((completed_this_month - completed_last_month) / completed_last_month * 100)
+                if completed_last_month > 0 else 0
+            )
+
+            # Средняя стоимость завершенного ремонта
+            avg_cost = await conn.fetchval('''
+                SELECT AVG(final_cost) FROM repair_requests 
+                WHERE final_cost IS NOT NULL AND status = 'Выдана'
+            ''') or 0
+
+            # Среднее время ремонта в днях
+            avg_repair_time = await conn.fetchval('''
+                SELECT AVG(EXTRACT(EPOCH FROM (actual_completion - created_at))/86400)
+                FROM repair_requests 
+                WHERE actual_completion IS NOT NULL
+            ''') or 0
 
             # Статистика по статусам
             status_stats = await conn.fetch('''
@@ -1076,39 +1093,21 @@ class PostgreSQLDatabase:
                     END
             ''')
 
-            # Средняя стоимость ремонта
-            avg_cost = await conn.fetchval('''
-                SELECT AVG(final_cost) FROM repair_requests 
-                WHERE final_cost IS NOT NULL AND status = 'Выдана'
-            ''') or 0
-
-            # Среднее время ремонта в днях
-            avg_repair_time = await conn.fetchval('''
-                SELECT AVG(EXTRACT(EPOCH FROM (actual_completion - created_at))/86400)
-                FROM repair_requests 
-                WHERE actual_completion IS NOT NULL
-            ''') or 0
-
-            # Топ мастеров по количеству выполненных работ за месяц
+            # Топ-5 мастеров по завершенным ремонтам за последние 30 дней
             top_masters = await conn.fetch('''
                 SELECT 
                     u.full_name,
                     COUNT(rr.id) as completed_repairs,
                     AVG(EXTRACT(EPOCH FROM (rr.actual_completion - rr.created_at))/86400) as avg_days
                 FROM users u
-                LEFT JOIN repair_requests rr ON u.id = rr.assigned_master_id
-                WHERE u.role = 'master' 
-                    AND rr.status = 'Выдана'
-                    AND rr.actual_completion >= CURRENT_DATE - INTERVAL '30 days'
-                GROUP BY u.id, u.full_name
+                JOIN repair_requests rr ON rr.assigned_master_id = u.id
+                WHERE u.role = 'master'
+                  AND rr.status = 'Выдана'
+                  AND rr.actual_completion >= CURRENT_DATE - INTERVAL '30 days'
+                GROUP BY u.full_name
                 ORDER BY completed_repairs DESC
                 LIMIT 5
             ''')
-
-            # Расчет процента роста
-            growth_percentage = 0
-            if completed_last_month > 0:
-                growth_percentage = ((completed_this_month - completed_last_month) / completed_last_month) * 100
 
             return {
                 'total_requests': total_requests,
