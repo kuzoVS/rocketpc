@@ -84,7 +84,7 @@ async def dashboard_statistics(request: Request):
 
 @app.get("/dashboard/clients", response_class=HTMLResponse)
 async def dashboard_statistics(request: Request):
-    return templates.TemplateResponse("dashboard/clients.html", {"request": request, "page": "requests"})
+    return templates.TemplateResponse("dashboard/clients.html", {"request": request, "page": "clients"})
 
 
 @app.get("/dashboard/api/masters/available")
