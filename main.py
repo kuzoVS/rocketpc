@@ -78,9 +78,14 @@ async def dashboard_requests(request: Request):
 async def dashboard_users(request: Request):
     return RedirectResponse(url="/dashboard", status_code=302)
 
-@app.get("/dashboard/statistics", response_class=HTMLResponse)
+@app.get("/dashboard/schedule", response_class=HTMLResponse)
 async def dashboard_statistics(request: Request):
     return RedirectResponse(url="/dashboard", status_code=302)
+
+@app.get("/dashboard/clients", response_class=HTMLResponse)
+async def dashboard_statistics(request: Request):
+    return templates.TemplateResponse("dashboard/clients.html", {"request": request, "page": "requests"})
+
 
 @app.get("/dashboard/api/masters/available")
 async def get_available_masters_api(token_data: Dict = Depends(verify_token_from_cookie)):
