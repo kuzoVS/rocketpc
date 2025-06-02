@@ -8,7 +8,7 @@ import uvicorn
 import os
 from typing import Dict, Optional
 from app.routers import clients
-from app.routers import main, requests, auth, dashboard
+from app.routers import main, requests, auth, dashboard, users
 from app.config import settings
 from app.database_pg import db
 from app.auth import verify_token_from_cookie, require_role_cookie, clear_auth_cookie
@@ -67,6 +67,8 @@ app.include_router(main.router)
 app.include_router(requests.router, prefix="/api")
 app.include_router(auth.router)
 app.include_router(clients.router, prefix="/api")
+app.include_router(users.router, prefix="/api")
+
 
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard_page(request: Request):

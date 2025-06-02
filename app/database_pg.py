@@ -1431,5 +1431,126 @@ class PostgreSQLDatabase:
         """Обновление информации о клиенте (алиас для update_client)"""
         return await self.update_client(client_id, client_data)
 
+    # Добавьте эти методы в класс PostgreSQLDatabase в файл app/database_pg.py
+
+    async def update_user_info(self, user_id: int, email: str, full_name: str, role: str, is_active: bool,
+                               phone: str = None) -> bool:
+        """Обновление информации о пользователе"""
+        async with self.pool.acquire() as conn:
+            try:
+                await conn.execute('''
+                    UPDATE users 
+                    SET email = $1, full_name = $2, role = $3, is_active = $4, phone = $5
+                    WHERE id = $6
+                ''', email, full_name, role, is_active, phone, user_id)
+                return True
+            except Exception as e:
+                print(f"❌ Ошибка обновления пользователя: {e}")
+                return False
+
+    async def update_user_status(self, user_id: int, is_active: bool) -> bool:
+        """Обновление статуса пользователя (активен/неактивен)"""
+        async with self.pool.acquire() as conn:
+            try:
+                result = await conn.execute('''
+                    UPDATE users 
+                    SET is_active = $1
+                    WHERE id = $2
+                ''', is_active, user_id)
+                return result == 'UPDATE 1'
+            except Exception as e:
+                print(f"❌ Ошибка обновления статуса пользователя: {e}")
+                return False
+
+    async def delete_user(self, user_id: int) -> bool:
+        """Удаление пользователя (помечается как неактивный)"""
+        async with self.pool.acquire() as conn:
+            try:
+                # Помечаем как неактивного вместо удаления
+                await conn.execute('''
+                    UPDATE users 
+                    SET is_active = FALSE
+                    WHERE id = $1
+                ''', user_id)
+                return True
+            except Exception as e:
+                print(f"❌ Ошибка удаления пользователя: {e}")
+                return False
+
+    async def get_user_statistics(self) -> Dict:
+        """Получение статистики пользователей"""
+        async with self.pool.acquire() as conn:
+            try:
+                # Общее количество пользователей
+                total_users = await conn.fetchval('SELECT COUNT(*) FROM users WHERE is_active = TRUE')
+
+                # Количество по ролям
+                roles_stats = await conn.fetch('''
+                    SELECT role, COUNT(*) as count
+                    FROM users 
+                    WHERE is_active = TRUE
+                    GROUP BY role
+                    ORDER BY count DESC
+                ''')
+
+                # Недавние пользователи
+                recent_users = await conn.fetchval('''
+                    SELECT COUNT(*) FROM users 
+                    WHERE created_at >= CURRENT_DATE - INTERVAL '30 days'
+                    AND is_active = TRUE
+                ''')
+
+                return {
+                    'total_users': total_users or 0,
+                    'roles_stats': [dict(role) for role in roles_stats],
+                    'recent_users': recent_users or 0
+                }
+
+            except Exception as e:
+                print(f"❌ Ошибка получения статистики пользователей: {e}")
+                return {
+                    'total_users': 0,
+                    'roles_stats': [],
+                    'recent_users': 0
+                }
+
+    async def check_username_exists(self, username: str, exclude_user_id: int = None) -> bool:
+        """Проверка существования имени пользователя"""
+        async with self.pool.acquire() as conn:
+            try:
+                if exclude_user_id:
+                    result = await conn.fetchval('''
+                        SELECT id FROM users 
+                        WHERE username = $1 AND id != $2
+                    ''', username, exclude_user_id)
+                else:
+                    result = await conn.fetchval('''
+                        SELECT id FROM users 
+                        WHERE username = $1
+                    ''', username)
+                return result is not None
+            except Exception as e:
+                print(f"❌ Ошибка проверки имени пользователя: {e}")
+                return False
+
+    async def check_email_exists(self, email: str, exclude_user_id: int = None) -> bool:
+        """Проверка существования email"""
+        async with self.pool.acquire() as conn:
+            try:
+                if exclude_user_id:
+                    result = await conn.fetchval('''
+                        SELECT id FROM users 
+                        WHERE email = $1 AND id != $2
+                    ''', email, exclude_user_id)
+                else:
+                    result = await conn.fetchval('''
+                        SELECT id FROM users 
+                        WHERE email = $1
+                    ''', email)
+                return result is not None
+            except Exception as e:
+                print(f"❌ Ошибка проверки email: {e}")
+                return False
+
 # Создание глобального экземпляра
 db = PostgreSQLDatabase()
