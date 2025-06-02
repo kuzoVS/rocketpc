@@ -765,3 +765,80 @@ style.textContent = `
             transform: translateX(100%);
             opacity: 0;
         }
+    }
+
+    /* Стили для кнопки удаления */
+    .btn-danger {
+        background: rgba(220, 53, 69, 0.2) !important;
+        color: #dc3545 !important;
+        border-color: rgba(220, 53, 69, 0.3) !important;
+    }
+
+    .btn-danger:hover {
+        background: rgba(220, 53, 69, 0.3) !important;
+        border-color: #dc3545 !important;
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(220, 53, 69, 0.3);
+    }
+
+    /* Улучшенные стили для модальных окон */
+    .modal {
+        backdrop-filter: blur(10px);
+    }
+
+    .modal-content {
+        animation: modalSlideIn 0.4s ease-out;
+    }
+
+    @keyframes modalSlideIn {
+        from {
+            opacity: 0;
+            transform: scale(0.9) translateY(-50px);
+        }
+        to {
+            opacity: 1;
+            transform: scale(1) translateY(0);
+        }
+    }
+
+    /* Стили для загрузки */
+    .loading-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.7);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+    }
+
+    .loading-content {
+        background: rgba(26, 26, 46, 0.9);
+        padding: 2rem;
+        border-radius: 12px;
+        border: 1px solid rgba(0, 255, 255, 0.3);
+        text-align: center;
+        backdrop-filter: blur(10px);
+    }
+
+    .loading-spinner {
+        width: 40px;
+        height: 40px;
+        border: 3px solid rgba(0, 255, 255, 0.3);
+        border-top: 3px solid #00ffff;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 1rem;
+    }
+
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+`;
+document.head.appendChild(style);
+
+console.log('✅ JavaScript для управления пользователями загружен и готов к работе');

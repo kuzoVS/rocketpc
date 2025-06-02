@@ -246,6 +246,19 @@ async def get_users_api(
         print(f"❌ Ошибка получения пользователей через API: {e}")
         raise HTTPException(status_code=500, detail="Ошибка загрузки данных")
 
+@router.get("/api/statistics")
+async def get_user_statistics_api(
+        token_data: Dict = Depends(require_role_cookie(["admin", "director"]))
+):
+    print(token_data)
+    """API для получения статистики пользователей"""
+    try:
+        stats = await db.get_user_statistics()
+        return stats
+    except Exception as e:
+        print(f"❌ Ошибка получения статистики пользователей: {e}")
+        raise HTTPException(status_code=500, detail="Ошибка загрузки статистики")
+
 
 @router.get("/api/{user_id}")
 async def get_user_api(
@@ -265,25 +278,3 @@ async def get_user_api(
         raise HTTPException(status_code=500, detail="Ошибка загрузки данных")
 
 
-@router.get("/api/statistics")
-async def get_user_statistics_api(
-        token_data: Dict = Depends(require_role_cookie(["admin", "director"]))
-):
-    """ИСПРАВЛЕННОЕ API для получения статистики пользователей"""
-    try:
-        print("📊 Запрос статистики пользователей...")
-        stats = await db.get_user_statistics()
-        print(f"✅ Статистика получена: {stats}")
-        return stats
-    except Exception as e:
-        print(f"❌ Ошибка получения статистики пользователей: {e}")
-        import traceback
-        traceback.print_exc()
-
-        # Возвращаем пустую статистику вместо ошибки
-        return {
-            "total_users": 0,
-            "admin_users": 0,
-            "master_users": 0,
-            "recent_users": 0
-        }
