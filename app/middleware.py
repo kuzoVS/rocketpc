@@ -1,4 +1,5 @@
-# app/middleware.py - Исправленная версия для предотвращения TaskGroup ошибок
+# app/middleware.py - ИСПРАВЛЕННАЯ ВЕРСИЯ для публичных эндпоинтов
+
 from fastapi import Request, HTTPException
 from fastapi.responses import RedirectResponse
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -9,7 +10,7 @@ from app.auth import verify_token, verify_token_from_cookie, decode_token_from_c
 
 
 class AuthenticationMiddleware(BaseHTTPMiddleware):
-    """Исправленная версия middleware для предотвращения TaskGroup ошибок"""
+    """Исправленная версия middleware с поддержкой публичных эндпоинтов"""
 
     def __init__(self, app):
         super().__init__(app)
@@ -25,22 +26,29 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
         if not path.startswith('/static/'):
             print(f"📡 {method} {path}")
 
-        # Список путей, которые НЕ требуют авторизации
+        # 🔧 ОБНОВЛЕННЫЙ список публичных путей
         public_paths = [
             '/',
             '/health',
             '/api',
             '/logout',
-            '/api/requests',  # POST создание заявки
         ]
 
-        # Проверяем на точное совпадение или начало пути
-        is_public = (
-                path in public_paths or
-                path.startswith('/static/') or
-                path.startswith('/auth/') or
-                (path.startswith('/api/requests/') and path.endswith('/status'))
-        )
+        # 🔧 НОВЫЕ паттерны для публичных эндпоинтов
+        public_patterns = [
+            r'^/static/.*',                    # Статические файлы
+            r'^/auth/.*',                      # Авторизация
+            r'^/api/requests/$',               # POST создание заявки (ПУБЛИЧНЫЙ)
+            r'^/api/requests/[^/]+/status$',   # GET статус заявки (ПУБЛИЧНЫЙ)
+        ]
+
+        # Проверяем на точное совпадение
+        is_public_exact = path in public_paths
+
+        # Проверяем на совпадение с паттернами
+        is_public_pattern = any(re.match(pattern, path) for pattern in public_patterns)
+
+        is_public = is_public_exact or is_public_pattern
 
         if is_public:
             print(f"🌐 Публичный путь: {path}")
