@@ -343,7 +343,8 @@ function createStatusChart(statusData) {
         { status: 'Ожидание запчастей', count: 1 }
     ];
 
-    drawPieChart(ctx, data, rect.width, rect.height);
+    // Используем правильное название функции
+    drawEnhancedPieChart(ctx, data, rect.width, rect.height);
 
     // Создаем легенду снизу
     createPieChartLegend(data);
@@ -373,7 +374,15 @@ function drawEnhancedPieChart(ctx, data, width, height) {
     };
 
     const total = data.reduce((sum, item) => sum + item.count, 0);
-    if (total === 0) return;
+
+    // Если нет данных, показываем заглушку
+    if (total === 0) {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.font = '16px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('Нет данных для отображения', width/2, height/2);
+        return;
+    }
 
     let currentAngle = -Math.PI / 2; // Начинаем сверху
 
@@ -435,6 +444,47 @@ function drawEnhancedPieChart(ctx, data, width, height) {
     ctx.fillText('заявок', centerX, centerY + 20);
 }
 
+function drawEnhancedLineChart(ctx, chartData, width, height) {
+    // Очищаем canvas
+    ctx.clearRect(0, 0, width, height);
+
+    const padding = 60;
+    const chartWidth = width - padding * 2;
+    const chartHeight = height - padding * 2;
+
+    const labels = chartData.labels;
+    const datasets = chartData.datasets;
+
+    if (!labels.length) {
+        // Если нет данных, показываем заглушку
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.font = '16px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('Нет данных для отображения', width/2, height/2);
+        return;
+    }
+
+    // Находим максимальное значение
+    const maxValue = Math.max(...datasets.flatMap(d => d.data)) || 10;
+    const stepX = chartWidth / (labels.length - 1);
+    const stepY = chartHeight / maxValue;
+
+    // Рисуем сетку
+    drawGrid(ctx, padding, chartWidth, chartHeight, maxValue, labels.length);
+
+    // Рисуем линии данных
+    datasets.forEach((dataset, index) => {
+        drawDataLine(ctx, dataset, padding, stepX, stepY, chartHeight, index);
+    });
+
+    // Рисуем подписи осей
+    drawAxisLabels(ctx, labels, padding, stepX, chartHeight, maxValue, stepY);
+
+    // НЕ рисуем легенду внутри canvas - она уже есть в HTML снизу
+    // Убираем вызов drawBottomLegend
+}
+
+
 function drawGrid(ctx, padding, chartWidth, chartHeight, maxValue, labelCount) {
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
     ctx.lineWidth = 1;
@@ -457,6 +507,25 @@ function drawGrid(ctx, padding, chartWidth, chartHeight, maxValue, labelCount) {
         ctx.lineTo(padding + chartWidth, y);
         ctx.stroke();
     }
+}
+
+function drawBottomLegend(ctx, datasets, width, height, padding) {
+    const legendY = height - 30;
+    const legendStartX = width / 2 - (datasets.length * 100) / 2;
+
+    datasets.forEach((dataset, index) => {
+        const x = legendStartX + index * 150;
+
+        // Цветной квадратик
+        ctx.fillStyle = dataset.color;
+        ctx.fillRect(x, legendY, 15, 15);
+
+        // Подпись
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '14px Arial';
+        ctx.textAlign = 'left';
+        ctx.fillText(dataset.label, x + 25, legendY + 12);
+    });
 }
 
 function drawDataLine(ctx, dataset, padding, stepX, stepY, chartHeight, index) {
@@ -573,23 +642,23 @@ function createPieChartLegend(data) {
 
     const container = canvas.parentElement;
 
-    // Удаляем старую легенду если есть
-    const oldLegend = container.querySelector('.bottom-chart-legend');
-    if (oldLegend) {
-        oldLegend.remove();
-    }
+    // Удаляем ВСЕ старые легенды
+    const oldLegends = container.querySelectorAll('.bottom-chart-legend, .side-chart-legend');
+    oldLegends.forEach(legend => legend.remove());
 
-    // Создаем контейнер для легенды снизу
+    // Создаем контейнер для легенды СТРОГО СНИЗУ
     const legendContainer = document.createElement('div');
     legendContainer.className = 'bottom-chart-legend';
     legendContainer.style.cssText = `
-        display: flex;
-        justify-content: center;
+        display: flex !important;
+        justify-content: center !important;
         gap: 2rem;
         margin-top: 1rem;
         padding-top: 1rem;
         border-top: 1px solid rgba(0, 255, 255, 0.1);
         flex-wrap: wrap;
+        position: static !important;
+        width: 100% !important;
     `;
 
     const colors = {
@@ -601,8 +670,6 @@ function createPieChartLegend(data) {
         'Готова к выдаче': '#4caf50',
         'Выдана': '#00ff00'
     };
-
-    const total = data.reduce((sum, item) => sum + item.count, 0);
 
     data.forEach((item, index) => {
         const color = colors[item.status] || `hsl(${index * 60}, 70%, 60%)`;
@@ -631,6 +698,7 @@ function createPieChartLegend(data) {
         legendContainer.appendChild(legendItem);
     });
 
+    // Добавляем легенду в конец контейнера (снизу)
     container.appendChild(legendContainer);
 }
 
