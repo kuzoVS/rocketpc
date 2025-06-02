@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Управление пользователями - ROCKET PC</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1, h2 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 30px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .form-section {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 5px;
+            margin-bottom: 30px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, select, textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .btn-danger {
+            background-color: #dc3545;
+        }
+        .btn-danger:hover {
+            background-color: #c82333;
+        }
+        .btn-warning {
+            background-color: #ffc107;
+            color: #212529;
+        }
+        .btn-warning:hover {
+            background-color: #e0a800;
+        }
+        .status-active {
+            color: green;
+            font-weight: bold;
+        }
+        .status-inactive {
+            color: red;
+            font-weight: bold;
+        }
+        .role-admin { background-color: #ff6b6b; color: white; padding: 2px 6px; border-radius: 3px; }
+        .role-director { background-color: #4ecdc4; color: white; padding: 2px 6px; border-radius: 3px; }
+        .role-manager { background-color: #45b7d1; color: white; padding: 2px 6px; border-radius: 3px; }
+        .role-master { background-color: #96ceb4; color: white; padding: 2px 6px; border-radius: 3px; }
+        .form-row {
+            display: flex;
+            gap: 15px;
+        }
+        .form-row .form-group {
+            flex: 1;
+        }
+        .back-link {
+            display: inline-block;
+            margin-bottom: 20px;
+            color: #007bff;
+            text-decoration: none;
+        }
+        .back-link:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="/dashboard" class="back-link">← Вернуться в Dashboard</a>
+
+        <h1>Управление пользователями</h1>
+
+        <!-- Форма добавления нового пользователя -->
+        <div class="form-section">
+            <h2>Добавить нового пользователя</h2>
+            <form method="POST" action="/dashboard/users/create">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="username">Имя пользователя *</label>
+                        <input type="text" id="username" name="username" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="email">Email *</label>
+                        <input type="email" id="email" name="email" required>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="password">Пароль *</label>
+                        <input type="password" id="password" name="password" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="full_name">Полное имя *</label>
+                        <input type="text" id="full_name" name="full_name" required>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="role">Роль *</label>
+                        <select id="role" name="role" required>
+                            <option value="">Выберите роль</option>
+                            <option value="admin">Администратор</option>
+                            <option value="director">Директор</option>
+                            <option value="manager">Менеджер</option>
+                            <option value="master">Мастер</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="phone">Телефон</label>
+                        <input type="tel" id="phone" name="phone">
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="specialization">Специализация (для мастеров)</label>
+                        <input type="text" id="specialization" name="specialization" placeholder="Например: Ремонт ноутбуков">
+                    </div>
+                    <div class="form-group">
+                        <label for="max_concurrent_repairs">Макс. заявок одновременно</label>
+                        <input type="number" id="max_concurrent_repairs" name="max_concurrent_repairs" value="5" min="1" max="20">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="notes">Заметки</label>
+                    <textarea id="notes" name="notes" rows="3"></textarea>
+                </div>
+
+                <button type="submit">Создать пользователя</button>
+            </form>
+        </div>
+
+        <!-- Список пользователей -->
+        <h2>Список пользователей</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Пользователь</th>
+                    <th>Email</th>
+                    <th>Полное имя</th>
+                    <th>Роль</th>
+                    <th>Телефон</th>
+                    <th>Специализация</th>
+                    <th>Статус</th>
+                    <th>Доступен</th>
+                    <th>Заявок/Макс</th>
+                    <th>Дата найма</th>
+                    <th>Последний вход</th>
+                    <th>Действия</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Примеры данных - в реальном приложении эти данные будут загружаться из базы -->
+                <tr>
+                    <td>1</td>
+                    <td>admin</td>
+                    <td>admin@rocketpc.ru</td>
+                    <td>Администратор</td>
+                    <td><span class="role-admin">admin</span></td>
+                    <td>+7 (999) 000-00-01</td>
+                    <td>-</td>
+                    <td><span class="status-active">Активен</span></td>
+                    <td>Да</td>
+                    <td>-</td>
+                    <td>01.01.2024</td>
+                    <td>02.06.2025 10:30</td>
+                    <td>
+                        <button class="btn-warning" onclick="editUser(1)">Изменить</button>
+                        <button class="btn-danger" onclick="toggleUserStatus(1, false)">Деактивировать</button>
+                    </td>
+                </tr>
+                <tr>
+                    <td>2</td>
+                    <td>director</td>
+                    <td>director@rocketpc.ru</td>
+                    <td>Иван Директоров</td>
+                    <td><span class="role-director">director</span></td>
+                    <td>+7 (999) 000-00-02</td>
+                    <td>-</td>
+                    <td><span class="status-active">Активен</span></td>
+                    <td>Да</td>
+                    <td>-</td>
+                    <td>01.01.2024</td>
+                    <td>01.06.2025 18:45</td>
+                    <td>
+                        <button class="btn-warning" onclick="editUser(2)">Изменить</button>
+                        <button class="btn-danger" onclick="toggleUserStatus(2, false)">Деактивировать</button>
+                    </td>
+                </tr>
+                <tr>
+                    <td>3</td>
+                    <td>manager</td>
+                    <td>manager@rocketpc.ru</td>
+                    <td>Анна Менеджерова</td>
+                    <td><span class="role-manager">manager</span></td>
+                    <td>+7 (999) 000-00-03</td>
+                    <td>-</td>
+                    <td><span class="status-active">Активен</span></td>
+                    <td>Да</td>
+                    <td>-</td>
+                    <td>01.01.2024</td>
+                    <td>02.06.2025 09:15</td>
+                    <td>
+                        <button class="btn-warning" onclick="editUser(3)">Изменить</button>
+                        <button class="btn-danger" onclick="toggleUserStatus(3, false)">Деактивировать</button>
+                    </td>
+                </tr>
+                <tr>
+                    <td>4</td>
+                    <td>master1</td>
+                    <td>master1@rocketpc.ru</td>
+                    <td>Алексей Мастеров</td>
+                    <td><span class="role-master">master</span></td>
+                    <td>+7 (999) 000-00-04</td>
+                    <td>Ноутбуки и ПК</td>
+                    <td><span class="status-active">Активен</span></td>
+                    <td>Да</td>
+                    <td>3/5</td>
+                    <td>01.01.2024</td>
+                    <td>02.06.2025 08:00</td>
+                    <td>
+                        <button class="btn-warning" onclick="editUser(4)">Изменить</button>
+                        <button class="btn-danger" onclick="toggleUserStatus(4, false)">Деактивировать</button>
+                    </td>
+                </tr>
+                <tr>
+                    <td>5</td>
+                    <td>master2</td>
+                    <td>master2@rocketpc.ru</td>
+                    <td>Максим Ремонтов</td>
+                    <td><span class="role-master">master</span></td>
+                    <td>+7 (999) 000-00-05</td>
+                    <td>Материнские платы</td>
+                    <td><span class="status-active">Активен</span></td>
+                    <td>Да</td>
+                    <td>2/5</td>
+                    <td>01.01.2024</td>
+                    <td>01.06.2025 17:30</td>
+                    <td>
+                        <button class="btn-warning" onclick="editUser(5)">Изменить</button>
+                        <button class="btn-danger" onclick="toggleUserStatus(5, false)">Деактивировать</button>
+                    </td>
+                </tr>
+                <tr>
+                    <td>6</td>
+                    <td>master3</td>
+                    <td>master3@rocketpc.ru</td>
+                    <td>Дмитрий Сервисов</td>
+                    <td><span class="role-master">master</span></td>
+                    <td>+7 (999) 000-00-06</td>
+                    <td>Блоки питания</td>
+                    <td><span class="status-inactive">Неактивен</span></td>
+                    <td>Нет</td>
+                    <td>0/5</td>
+                    <td>01.01.2024</td>
+                    <td>30.05.2025 16:20</td>
+                    <td>
+                        <button class="btn-warning" onclick="editUser(6)">Изменить</button>
+                        <button onclick="toggleUserStatus(6, true)">Активировать</button>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+
+        <!-- Форма редактирования пользователя (скрыта по умолчанию) -->
+        <div id="editForm" class="form-section" style="display: none;">
+            <h2>Редактировать пользователя</h2>
+            <form method="POST" action="/dashboard/users/update">
+                <input type="hidden" id="edit_user_id" name="user_id">
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="edit_username">Имя пользователя *</label>
+                        <input type="text" id="edit_username" name="username" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit_email">Email *</label>
+                        <input type="email" id="edit_email" name="email" required>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="edit_full_name">Полное имя *</label>
+                        <input type="text" id="edit_full_name" name="full_name" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="edit_role">Роль *</label>
+                        <select id="edit_role" name="role" required>
+                            <option value="admin">Администратор</option>
+                            <option value="director">Директор</option>
+                            <option value="manager">Менеджер</option>
+                            <option value="master">Мастер</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="edit_phone">Телефон</label>
+                        <input type="tel" id="edit_phone" name="phone">
+                    </div>
+                    <div class="form-group">
+                        <label for="edit_specialization">Специализация</label>
+                        <input type="text" id="edit_specialization" name="specialization">
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="edit_max_concurrent_repairs">Макс. заявок одновременно</label>
+                        <input type="number" id="edit_max_concurrent_repairs" name="max_concurrent_repairs" min="1" max="20">
+                    </div>
+                    <div class="form-group">
+                        <label for="edit_is_available">Доступен для заявок</label>
+                        <select id="edit_is_available" name="is_available">
+                            <option value="true">Да</option>
+                            <option value="false">Нет</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="edit_notes">Заметки</label>
+                    <textarea id="edit_notes" name="notes" rows="3"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="edit_new_password">Новый пароль (оставьте пустым, если не нужно менять)</label>
+                    <input type="password" id="edit_new_password" name="new_password">
+                </div>
+
+                <button type="submit">Сохранить изменения</button>
+                <button type="button" onclick="cancelEdit()">Отмена</button>
+            </form>
+        </div>
+
+        <!-- Статистика -->
+        <div class="form-section">
+            <h2>Статистика пользователей</h2>
+            <div class="form-row">
+                <div class="form-group">
+                    <strong>Всего пользователей:</strong> 6
+                </div>
+                <div class="form-group">
+                    <strong>Активных:</strong> 5
+                </div>
+                <div class="form-group">
+                    <strong>Мастеров:</strong> 3
+                </div>
+                <div class="form-group">
+                    <strong>Доступных мастеров:</strong> 2
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Простой JavaScript для базовой функциональности
+        function editUser(userId) {
+            // Показываем форму редактирования
+            document.getElementById('editForm').style.display = 'block';
+            document.getElementById('edit_user_id').value = userId;
+
+            // Прокручиваем к форме
+            document.getElementById('editForm').scrollIntoView({ behavior: 'smooth' });
+
+            // Здесь должна быть загрузка данных пользователя
+            // В реальном приложении это будет AJAX запрос
+        }
+
+        function cancelEdit() {
+            document.getElementById('editForm').style.display = 'none';
+        }
+
+        function toggleUserStatus(userId, activate) {
+            const action = activate ? 'активировать' : 'деактивировать';
+            if (confirm(`Вы уверены, что хотите ${action} этого пользователя?`)) {
+                // Здесь должен быть AJAX запрос для изменения статуса
+                // В реальном приложении это будет отправка POST запроса
+                alert(`Пользователь будет ${activate ? 'активирован' : 'деактивирован'}`);
+            }
+        }
+
+        // Показать/скрыть поле специализации в зависимости от роли
+        document.getElementById('role').addEventListener('change', function() {
+            const specializationGroup = document.getElementById('specialization').parentElement;
+            const maxRepairsGroup = document.getElementById('max_concurrent_repairs').parentElement;
+
+            if (this.value === 'master') {
+                specializationGroup.style.display = 'block';
+                maxRepairsGroup.style.display = 'block';
+            } else {
+                specializationGroup.style.display = 'none';
+                maxRepairsGroup.style.display = 'none';
+            }
+        });
+
+        document.getElementById('edit_role').addEventListener('change', function() {
+            const specializationGroup = document.getElementById('edit_specialization').parentElement;
+            const maxRepairsGroup = document.getElementById('edit_max_concurrent_repairs').parentElement;
+            const availableGroup = document.getElementById('edit_is_available').parentElement;
+
+            if (this.value === 'master') {
+                specializationGroup.style.display = 'block';
+                maxRepairsGroup.style.display = 'block';
+                availableGroup.style.display = 'block';
+            } else {
+                specializationGroup.style.display = 'none';
+                maxRepairsGroup.style.display = 'none';
+                availableGroup.style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>
