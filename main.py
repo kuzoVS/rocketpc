@@ -78,11 +78,7 @@ async def dashboard_requests(request: Request):
 
 @app.get("/dashboard/users", response_class=HTMLResponse)
 async def dashboard_users(request: Request):
-    return RedirectResponse(url="/dashboard", status_code=302)
-
-@app.get("/dashboard/schedule", response_class=HTMLResponse)
-async def dashboard_statistics(request: Request):
-    return RedirectResponse(url="/dashboard", status_code=302)
+    return templates.TemplateResponse("dashboard/users.html", {"request": request, "page": "users"})
 
 @app.get("/dashboard/clients", response_class=HTMLResponse)
 async def dashboard_statistics(request: Request):
