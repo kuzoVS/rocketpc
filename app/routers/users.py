@@ -22,45 +22,12 @@ async def users_page(
 ):
     """Страница управления пользователями"""
     try:
-        # Получаем всех пользователей
+        # Получаем всех пользователей (фильтрация теперь на клиенте)
         all_users = await db.get_all_users()
-
-        # Применяем фильтры
-        filtered_users = all_users
-
-        # Фильтр по поиску
-        if search:
-            search_lower = search.lower()
-            filtered_users = [
-                user for user in filtered_users
-                if (search_lower in user['full_name'].lower() or
-                    search_lower in user['username'].lower() or
-                    search_lower in user['email'].lower() or
-                    search_lower in user['role'].lower())
-            ]
-
-        # Фильтр по роли
-        if role:
-            filtered_users = [user for user in filtered_users if user['role'] == role]
-
-        # Фильтр по статусу
-        if status:
-            is_active = status == 'active'
-            filtered_users = [user for user in filtered_users if user['is_active'] == is_active]
-
-        # Сортировка
-        if sort == "name":
-            filtered_users.sort(key=lambda x: x['full_name'].lower())
-        elif sort == "role":
-            filtered_users.sort(key=lambda x: x['role'])
-        elif sort == "created":
-            filtered_users.sort(key=lambda x: x['created_at'] or datetime.min, reverse=True)
-        elif sort == "login":
-            filtered_users.sort(key=lambda x: x['last_login'] or datetime.min, reverse=True)
 
         return templates.TemplateResponse("dashboard/users.html", {
             "request": request,
-            "users": filtered_users,
+            "users": all_users,  # Передаем всех пользователей
             "page": "users"
         })
 
@@ -225,9 +192,21 @@ async def delete_user(
         if token_data.get("sub") == str(user_id):
             return RedirectResponse(url="/dashboard/users?error=cannot_delete_self", status_code=302)
 
+        # Проверяем существование пользователя
+        user = await db.get_user(user_id)
+        if not user:
+            return RedirectResponse(url="/dashboard/users?error=user_not_found", status_code=302)
+
+        # Проверяем, не последний ли это администратор
+        if user['role'] in ['admin', 'director']:
+            admin_count = await db.get_users_count_by_role()
+            total_admins = admin_count.get('admin', 0) + admin_count.get('director', 0)
+            if total_admins <= 1:
+                return RedirectResponse(url="/dashboard/users?error=cannot_delete_last_admin", status_code=302)
+
         success = await db.delete_user(user_id)
         if not success:
-            raise HTTPException(status_code=404, detail="Пользователь не найден")
+            return RedirectResponse(url="/dashboard/users?error=deletion_failed", status_code=302)
 
         print(f"✅ Удален пользователь с ID: {user_id}")
         return RedirectResponse(url="/dashboard/users?success=deleted", status_code=302)

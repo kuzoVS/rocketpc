@@ -30,7 +30,10 @@
                     <p class="header-subtitle">Сотрудники и права доступа системы</p>
                 </div>
                 <div class="header-actions">
-                    <button class="btn btn-outline" onclick="window.location.reload()">
+                    <button class="btn btn-outline" onclick="exportUsers()">
+                        📥 Экспорт
+                    </button>
+                    <button class="btn btn-outline" onclick="loadUsers()">
                         🔄 Обновить
                     </button>
                     <button class="btn" onclick="openModal('addUserModal')">
@@ -52,7 +55,7 @@
                     <div class="stat-header">
                         <div class="stat-icon">👥</div>
                     </div>
-                    <div class="stat-value">{{ users|length if users else 0 }}</div>
+                    <div class="stat-value" id="totalUsers">0</div>
                     <div class="stat-label">Всего пользователей</div>
                     <div class="stat-change">
                         <span>📊</span> В системе
@@ -63,12 +66,7 @@
                     <div class="stat-header">
                         <div class="stat-icon">👤</div>
                     </div>
-                    <div class="stat-value">
-                        {% if users %}
-                            {{ users|selectattr("role", "equalto", "admin")|list|length +
-                               users|selectattr("role", "equalto", "director")|list|length }}
-                        {% else %}0{% endif %}
-                    </div>
+                    <div class="stat-value" id="adminUsers">0</div>
                     <div class="stat-label">Администраторы</div>
                     <div class="stat-change">
                         <span>🔐</span> Полные права
@@ -79,11 +77,7 @@
                     <div class="stat-header">
                         <div class="stat-icon">🔧</div>
                     </div>
-                    <div class="stat-value">
-                        {% if users %}
-                            {{ users|selectattr("role", "equalto", "master")|list|length }}
-                        {% else %}0{% endif %}
-                    </div>
+                    <div class="stat-value" id="masterUsers">0</div>
                     <div class="stat-label">Мастеров</div>
                     <div class="stat-change">
                         <span>⚡</span> Активных
@@ -94,58 +88,52 @@
                     <div class="stat-header">
                         <div class="stat-icon">📋</div>
                     </div>
-                    <div class="stat-value">
-                        {% if users %}
-                            {{ users|selectattr("role", "equalto", "manager")|list|length }}
-                        {% else %}0{% endif %}
-                    </div>
-                    <div class="stat-label">Менеджеров</div>
+                    <div class="stat-value" id="recentUsers">0</div>
+                    <div class="stat-label">Новых за месяц</div>
                     <div class="stat-change">
-                        <span>📈</span> Управление
+                        <span>📈</span> Регистрации
                     </div>
                 </div>
             </div>
 
             <!-- Фильтры -->
             <div class="filters-section fade-in">
-                <form method="GET" action="/dashboard/users" class="filters-form">
+                <div class="filters-form">
                     <div class="filter-group">
                         <label>Поиск пользователей</label>
                         <div class="search-box">
                             <span class="search-icon">🔍</span>
-                            <input type="text" name="search" value="{{ request.query_params.get('search', '') }}"
-                                   placeholder="Имя, email, роль..."
-                                   onchange="this.form.submit()">
+                            <input type="text" name="search" placeholder="Имя, email, роль...">
                         </div>
                     </div>
                     <div class="filter-group">
                         <label>Роль</label>
-                        <select name="role" onchange="this.form.submit()">
+                        <select name="role">
                             <option value="">Все роли</option>
-                            <option value="admin" {{ 'selected' if request.query_params.get('role') == 'admin' }}>Администратор</option>
-                            <option value="director" {{ 'selected' if request.query_params.get('role') == 'director' }}>Директор</option>
-                            <option value="manager" {{ 'selected' if request.query_params.get('role') == 'manager' }}>Менеджер</option>
-                            <option value="master" {{ 'selected' if request.query_params.get('role') == 'master' }}>Мастер</option>
+                            <option value="admin">Администратор</option>
+                            <option value="director">Директор</option>
+                            <option value="manager">Менеджер</option>
+                            <option value="master">Мастер</option>
                         </select>
                     </div>
                     <div class="filter-group">
                         <label>Статус</label>
-                        <select name="status" onchange="this.form.submit()">
+                        <select name="status">
                             <option value="">Все статусы</option>
-                            <option value="active" {{ 'selected' if request.query_params.get('status') == 'active' }}>Активные</option>
-                            <option value="inactive" {{ 'selected' if request.query_params.get('status') == 'inactive' }}>Неактивные</option>
+                            <option value="active">Активные</option>
+                            <option value="inactive">Неактивные</option>
                         </select>
                     </div>
                     <div class="filter-group">
                         <label>Сортировка</label>
-                        <select name="sort" onchange="this.form.submit()">
-                            <option value="name" {{ 'selected' if request.query_params.get('sort') == 'name' }}>По имени</option>
-                            <option value="role" {{ 'selected' if request.query_params.get('sort') == 'role' }}>По роли</option>
-                            <option value="created" {{ 'selected' if request.query_params.get('sort') == 'created' }}>По дате создания</option>
-                            <option value="login" {{ 'selected' if request.query_params.get('sort') == 'login' }}>По последнему входу</option>
+                        <select name="sort">
+                            <option value="name">По имени</option>
+                            <option value="role">По роли</option>
+                            <option value="created">По дате создания</option>
+                            <option value="login">По последнему входу</option>
                         </select>
                     </div>
-                </form>
+                </div>
             </div>
 
             <!-- Таблица пользователей -->
@@ -153,120 +141,17 @@
                 <div class="section-header">
                     <h3 class="section-title">Список пользователей</h3>
                     <div class="section-actions">
-                        <span class="users-count">
-                            {% if users %}{{ users|length }}{% else %}0{% endif %} пользователей
-                        </span>
+                        <span class="users-count">0 пользователей</span>
                     </div>
                 </div>
 
-                {% if users %}
                 <div class="users-grid">
-                    {% for user in users %}
-                    <div class="user-card">
-                        <div class="user-header">
-                            <div class="user-avatar-large">
-                                {{ user.full_name[0].upper() if user.full_name else user.username[0].upper() }}
-                            </div>
-                            <div class="user-basic-info">
-                                <h3 class="user-name">{{ user.full_name or user.username }}</h3>
-                                <p class="user-username">@{{ user.username }}</p>
-                                <div class="user-role-badge role-{{ user.role }}">
-                                    {% if user.role == 'admin' %}
-                                        🔐 Администратор
-                                    {% elif user.role == 'director' %}
-                                        👔 Директор
-                                    {% elif user.role == 'manager' %}
-                                        📋 Менеджер
-                                    {% elif user.role == 'master' %}
-                                        🔧 Мастер
-                                    {% else %}
-                                        👤 {{ user.role.title() }}
-                                    {% endif %}
-                                </div>
-                            </div>
-                            <div class="user-status">
-                                {% if user.is_active %}
-                                    <span class="status-badge status-active">Активен</span>
-                                {% else %}
-                                    <span class="status-badge status-inactive">Неактивен</span>
-                                {% endif %}
-                            </div>
-                        </div>
-
-                        <div class="user-details">
-                            <div class="user-info-grid">
-                                <div class="info-item">
-                                    <span class="info-label">Email:</span>
-                                    <span class="info-value">{{ user.email }}</span>
-                                </div>
-                                {% if user.phone %}
-                                <div class="info-item">
-                                    <span class="info-label">Телефон:</span>
-                                    <span class="info-value">{{ user.phone }}</span>
-                                </div>
-                                {% endif %}
-                                <div class="info-item">
-                                    <span class="info-label">Регистрация:</span>
-                                    <span class="info-value">
-                                        {% if user.created_at %}
-                                            {{ user.created_at.strftime('%d.%m.%Y') if user.created_at.strftime else user.created_at }}
-                                        {% else %}
-                                            Неизвестно
-                                        {% endif %}
-                                    </span>
-                                </div>
-                                <div class="info-item">
-                                    <span class="info-label">Последний вход:</span>
-                                    <span class="info-value">
-                                        {% if user.last_login %}
-                                            {{ user.last_login.strftime('%d.%m.%Y %H:%M') if user.last_login.strftime else user.last_login }}
-                                        {% else %}
-                                            Никогда
-                                        {% endif %}
-                                    </span>
-                                </div>
-                            </div>
-
-                            {% if user.role == 'master' and user.specialization %}
-                            <div class="master-specialization">
-                                <span class="spec-label">Специализация:</span>
-                                <span class="spec-value">{{ user.specialization }}</span>
-                            </div>
-                            {% endif %}
-                        </div>
-
-                        <div class="user-actions">
-                            <button class="btn btn-outline btn-sm" onclick="openEditModal({{ user.id }}, '{{ user.username }}', '{{ user.email }}', '{{ user.full_name }}', '{{ user.role }}', {{ user.is_active|tojson }}, '{{ user.phone or '' }}')">
-                                ✏️ Редактировать
-                            </button>
-                            {% if user.is_active %}
-                            <form method="POST" action="/auth/users/{{ user.id }}/deactivate" style="display: inline;">
-                                <button type="submit" class="btn btn-outline btn-sm btn-warning"
-                                        onclick="return confirm('Деактивировать пользователя {{ user.username }}?')">
-                                    🚫 Деактивировать
-                                </button>
-                            </form>
-                            {% else %}
-                            <form method="POST" action="/auth/users/{{ user.id }}/activate" style="display: inline;">
-                                <button type="submit" class="btn btn-outline btn-sm btn-success">
-                                    ✅ Активировать
-                                </button>
-                            </form>
-                            {% endif %}
-                        </div>
+                    <!-- Загрузка -->
+                    <div style="grid-column: 1 / -1; text-align: center; padding: 3rem;">
+                        <div class="loading"></div>
+                        <p style="color: rgba(255,255,255,0.6); margin-top: 1rem;">Загрузка пользователей...</p>
                     </div>
-                    {% endfor %}
                 </div>
-                {% else %}
-                <div class="empty-state">
-                    <div class="empty-state-icon">👥</div>
-                    <h3>Пользователи не найдены</h3>
-                    <p>Нет пользователей, соответствующих критериям поиска</p>
-                    <button class="btn" onclick="openModal('addUserModal')">
-                        ➕ Добавить первого пользователя
-                    </button>
-                </div>
-                {% endif %}
             </div>
         </main>
     </div>
@@ -279,7 +164,7 @@
                 <button class="close" onclick="closeModal('addUserModal')">×</button>
             </div>
 
-            <form method="POST" action="/auth/users">
+            <form method="POST" action="/dashboard/users">
                 <div class="form-row">
                     <div class="form-group">
                         <label for="username">Имя пользователя *</label>

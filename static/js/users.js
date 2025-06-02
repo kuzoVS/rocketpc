@@ -1,5 +1,6 @@
 // Глобальные переменные
 let allUsers = [];
+let filteredUsers = [];
 let currentEditUserId = null;
 
 // Инициализация при загрузке страницы
@@ -17,6 +18,9 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     // Настраиваем обработчики форм
     setupFormHandlers();
+
+    // Настраиваем обработчики фильтров
+    setupFilterHandlers();
 
     // Проверяем URL параметры для уведомлений
     checkURLParams();
@@ -62,6 +66,9 @@ async function loadCurrentUserInfo() {
             userAvatar.textContent = user.full_name.charAt(0).toUpperCase();
         }
 
+        // Сохраняем ID текущего пользователя для проверки при удалении
+        window.currentUserId = user.id;
+
         console.log('✅ Профиль текущего пользователя загружен:', user.full_name);
 
     } catch (err) {
@@ -90,9 +97,8 @@ async function loadUsers() {
             allUsers = data.users;
             console.log(`✅ Загружено ${allUsers.length} пользователей через API`);
 
-            // Обновляем отображение
-            renderUsers(allUsers);
-            updateUsersCount(allUsers.length);
+            // Применяем фильтры и отображаем
+            applyFilters();
         } else {
             console.log('❌ Ошибка загрузки:', response.status);
             showNotification('Ошибка загрузки пользователей', 'error');
@@ -127,6 +133,110 @@ async function loadUserStatistics() {
     } catch (error) {
         console.error('❌ Ошибка загрузки статистики:', error);
     }
+}
+
+// Настройка обработчиков фильтров
+function setupFilterHandlers() {
+    // Поиск
+    const searchInput = document.querySelector('input[name="search"]');
+    if (searchInput) {
+        searchInput.addEventListener('input', debounce(applyFilters, 300));
+    }
+
+    // Фильтры
+    const roleSelect = document.querySelector('select[name="role"]');
+    const statusSelect = document.querySelector('select[name="status"]');
+    const sortSelect = document.querySelector('select[name="sort"]');
+
+    if (roleSelect) roleSelect.addEventListener('change', applyFilters);
+    if (statusSelect) statusSelect.addEventListener('change', applyFilters);
+    if (sortSelect) sortSelect.addEventListener('change', applyFilters);
+}
+
+// Применение фильтров
+function applyFilters() {
+    const searchInput = document.querySelector('input[name="search"]');
+    const roleSelect = document.querySelector('select[name="role"]');
+    const statusSelect = document.querySelector('select[name="status"]');
+    const sortSelect = document.querySelector('select[name="sort"]');
+
+    const searchTerm = searchInput ? searchInput.value.toLowerCase() : '';
+    const roleFilter = roleSelect ? roleSelect.value : '';
+    const statusFilter = statusSelect ? statusSelect.value : '';
+    const sortBy = sortSelect ? sortSelect.value : 'name';
+
+    // Фильтрация
+    filteredUsers = allUsers.filter(user => {
+        // Поиск по тексту
+        if (searchTerm) {
+            const searchMatch =
+                user.full_name.toLowerCase().includes(searchTerm) ||
+                user.username.toLowerCase().includes(searchTerm) ||
+                user.email.toLowerCase().includes(searchTerm) ||
+                user.role.toLowerCase().includes(searchTerm);
+
+            if (!searchMatch) return false;
+        }
+
+        // Фильтр по роли
+        if (roleFilter && user.role !== roleFilter) return false;
+
+        // Фильтр по статусу
+        if (statusFilter) {
+            const isActive = statusFilter === 'active';
+            if (user.is_active !== isActive) return false;
+        }
+
+        return true;
+    });
+
+    // Сортировка
+    filteredUsers.sort((a, b) => {
+        let valueA, valueB;
+
+        switch (sortBy) {
+            case 'name':
+                valueA = a.full_name.toLowerCase();
+                valueB = b.full_name.toLowerCase();
+                break;
+            case 'role':
+                valueA = a.role;
+                valueB = b.role;
+                break;
+            case 'created':
+                valueA = new Date(a.created_at || 0);
+                valueB = new Date(b.created_at || 0);
+                break;
+            case 'login':
+                valueA = new Date(a.last_login || 0);
+                valueB = new Date(b.last_login || 0);
+                break;
+            default:
+                valueA = a.full_name.toLowerCase();
+                valueB = b.full_name.toLowerCase();
+        }
+
+        if (valueA < valueB) return -1;
+        if (valueA > valueB) return 1;
+        return 0;
+    });
+
+    // Отображаем результаты
+    renderUsers(filteredUsers);
+    updateUsersCount(filteredUsers.length);
+}
+
+// Debounce функция для поиска
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
 }
 
 // Отображение пользователей
@@ -180,6 +290,9 @@ function createUserCard(user) {
     const roleInfo = roleMap[user.role] || { name: user.role, class: 'role-other' };
     const statusClass = user.is_active ? 'status-active' : 'status-inactive';
     const statusText = user.is_active ? 'Активен' : 'Неактивен';
+
+    // Проверяем, можно ли удалить этого пользователя
+    const canDelete = window.currentUserId && user.id !== window.currentUserId;
 
     return `
         <div class="user-card">
@@ -240,6 +353,11 @@ function createUserCard(user) {
                         ✅ Активировать
                     </button>
                 `}
+                ${canDelete ? `
+                    <button class="btn btn-outline btn-sm btn-danger" onclick="deleteUser(${user.id}, '${user.username}')" title="Удалить пользователя">
+                        🗑️ Удалить
+                    </button>
+                ` : ''}
             </div>
         </div>
     `;
@@ -271,6 +389,47 @@ async function toggleUserStatus(userId, activate, username) {
     }
 }
 
+// Удаление пользователя
+async function deleteUser(userId, username) {
+    // Дополнительная проверка
+    if (window.currentUserId && userId === window.currentUserId) {
+        showNotification('Нельзя удалить самого себя', 'error');
+        return;
+    }
+
+    const confirmMessage = `Вы уверены, что хотите УДАЛИТЬ пользователя ${username}?\n\nЭто действие нельзя отменить!`;
+
+    if (!confirm(confirmMessage)) return;
+
+    // Двойное подтверждение для критичного действия
+    const doubleConfirm = confirm(`ПОСЛЕДНЕЕ ПРЕДУПРЕЖДЕНИЕ!\n\nПользователь ${username} будет НАВСЕГДА удален из системы.\n\nПродолжить?`);
+
+    if (!doubleConfirm) return;
+
+    try {
+        const response = await fetch(`/dashboard/users/${userId}/delete`, {
+            method: 'POST',
+            credentials: 'include'
+        });
+
+        if (response.ok) {
+            showNotification(`Пользователь ${username} удален`, 'success');
+            await loadUsers(); // Перезагружаем список
+            await loadUserStatistics(); // Обновляем статистику
+        } else {
+            const errorText = await response.text();
+            if (response.status === 400 && errorText.includes('cannot_delete_self')) {
+                showNotification('Нельзя удалить самого себя', 'error');
+            } else {
+                showNotification('Ошибка удаления пользователя', 'error');
+            }
+        }
+    } catch (error) {
+        console.error('❌ Ошибка удаления:', error);
+        showNotification('Ошибка подключения к серверу', 'error');
+    }
+}
+
 // Настройка обработчиков форм
 function setupFormHandlers() {
     // Форма создания пользователя
@@ -296,6 +455,7 @@ function setupFormHandlers() {
                     showNotification('Пользователь создан успешно', 'success');
                     closeModal('addUserModal');
                     await loadUsers();
+                    await loadUserStatistics();
                     e.target.reset();
                 } else {
                     const error = await response.text();
@@ -331,6 +491,7 @@ function setupFormHandlers() {
                     showNotification('Пользователь обновлен успешно', 'success');
                     closeModal('editUserModal');
                     await loadUsers();
+                    await loadUserStatistics();
                 } else {
                     showNotification('Ошибка обновления пользователя', 'error');
                 }
@@ -495,56 +656,16 @@ function logout() {
     window.location.href = '/logout';
 }
 
-// Фильтрация и поиск пользователей
-function filterUsers() {
-    const searchInput = document.querySelector('input[name="search"]');
-    const roleSelect = document.querySelector('select[name="role"]');
-    const statusSelect = document.querySelector('select[name="status"]');
-
-    if (!searchInput) return;
-
-    const searchTerm = searchInput.value.toLowerCase();
-    const roleFilter = roleSelect?.value || '';
-    const statusFilter = statusSelect?.value || '';
-
-    let filteredUsers = allUsers.filter(user => {
-        // Поиск по тексту
-        if (searchTerm) {
-            const searchMatch =
-                user.full_name.toLowerCase().includes(searchTerm) ||
-                user.username.toLowerCase().includes(searchTerm) ||
-                user.email.toLowerCase().includes(searchTerm) ||
-                user.role.toLowerCase().includes(searchTerm);
-
-            if (!searchMatch) return false;
-        }
-
-        // Фильтр по роли
-        if (roleFilter && user.role !== roleFilter) return false;
-
-        // Фильтр по статусу
-        if (statusFilter) {
-            const isActive = statusFilter === 'active';
-            if (user.is_active !== isActive) return false;
-        }
-
-        return true;
-    });
-
-    renderUsers(filteredUsers);
-    updateUsersCount(filteredUsers.length);
-}
-
 // Экспорт пользователей в CSV
 function exportUsers() {
-    if (!allUsers.length) {
+    if (!filteredUsers.length) {
         showNotification('Нет данных для экспорта', 'error');
         return;
     }
 
     const csvContent = [
         ['ID', 'Имя пользователя', 'Email', 'Полное имя', 'Роль', 'Статус', 'Телефон', 'Дата создания', 'Последний вход'],
-        ...allUsers.map(u => [
+        ...filteredUsers.map(u => [
             u.id,
             u.username,
             u.email,
@@ -563,7 +684,7 @@ function exportUsers() {
     link.download = `пользователи_${new Date().toISOString().split('T')[0]}.csv`;
     link.click();
 
-    showNotification(`Экспортировано ${allUsers.length} пользователей`, 'success');
+    showNotification(`Экспортировано ${filteredUsers.length} пользователей`, 'success');
 }
 
 // Обновление статистики в реальном времени
@@ -591,46 +712,7 @@ document.addEventListener('keydown', function(event) {
     }
 });
 
-// Валидация форм
-function validateUserForm(formData, isEdit = false) {
-    const errors = [];
-
-    // Проверка имени пользователя
-    if (!isEdit && !formData.get('username')) {
-        errors.push('Имя пользователя обязательно');
-    } else if (!isEdit && !/^[a-zA-Z0-9_]+$/.test(formData.get('username'))) {
-        errors.push('Имя пользователя может содержать только латинские буквы, цифры и подчеркивания');
-    }
-
-    // Проверка email
-    if (!formData.get('email')) {
-        errors.push('Email обязателен');
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.get('email'))) {
-        errors.push('Неверный формат email');
-    }
-
-    // Проверка полного имени
-    if (!formData.get('full_name')) {
-        errors.push('Полное имя обязательно');
-    }
-
-    // Проверка роли
-    if (!formData.get('role')) {
-        errors.push('Роль обязательна');
-    }
-
-    // Проверка пароля (только при создании или если указан)
-    const password = formData.get('password');
-    if (!isEdit && !password) {
-        errors.push('Пароль обязателен');
-    } else if (password && password.length < 6) {
-        errors.push('Пароль должен содержать минимум 6 символов');
-    }
-
-    return errors;
-}
-
-// Добавляем стили для анимации уведомлений
+// Добавим стили для анимации уведомлений
 const style = document.createElement('style');
 style.textContent = `
     @keyframes slideInRight {
@@ -653,6 +735,20 @@ style.textContent = `
             transform: translateX(100%);
             opacity: 0;
         }
+    }
+
+    /* Стили для кнопки удаления */
+    .btn-danger {
+        background: rgba(220, 53, 69, 0.2) !important;
+        color: #dc3545 !important;
+        border-color: rgba(220, 53, 69, 0.3) !important;
+    }
+
+    .btn-danger:hover {
+        background: rgba(220, 53, 69, 0.3) !important;
+        border-color: #dc3545 !important;
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(220, 53, 69, 0.3);
     }
 
     /* Улучшенные стили для модальных окон */

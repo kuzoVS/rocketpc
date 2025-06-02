@@ -728,16 +728,17 @@ class PostgreSQLDatabase:
             except Exception as e:
                 print(f"Ошибка создания админа: {e}")
 
-    async def create_user(self, username: str, email: str, password: str, full_name: str, role: str) -> int:
-        """Создание нового пользователя"""
+    async def create_user(self, username: str, email: str, password: str, full_name: str, role: str,
+                          phone: str = None) -> int:
+        """Создание нового пользователя с поддержкой телефона"""
         password_hash = self.hash_password(password)
 
         async with self.pool.acquire() as conn:
             user_id = await conn.fetchval('''
-                INSERT INTO users (username, email, password_hash, password_plain, full_name, role)
-                VALUES ($1, $2, $3, $4, $5, $6)
+                INSERT INTO users (username, email, password_hash, password_plain, full_name, role, phone)
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
                 RETURNING id
-            ''', username, email, password_hash, password, full_name, role)
+            ''', username, email, password_hash, password, full_name, role, phone)
 
             return user_id
 
@@ -773,14 +774,34 @@ class PostgreSQLDatabase:
             return dict(user) if user else None
 
     async def get_all_users(self) -> List[Dict]:
-        """Получение всех пользователей"""
+        """Получение всех пользователей с телефонами"""
         async with self.pool.acquire() as conn:
             users = await conn.fetch('''
-                SELECT id, username, email, password_plain, full_name, role, is_active, created_at, last_login
-                FROM users ORDER BY created_at DESC
+                SELECT 
+                    id, 
+                    username, 
+                    email, 
+                    password_plain, 
+                    full_name, 
+                    role, 
+                    phone,
+                    is_active, 
+                    created_at, 
+                    last_login,
+                    specialization
+                FROM users 
+                ORDER BY created_at DESC
             ''')
 
-            return [dict(user) for user in users]
+            result = []
+            for user in users:
+                user_dict = dict(user)
+                # Убеждаемся, что phone всегда присутствует
+                if user_dict.get('phone') is None:
+                    user_dict['phone'] = None
+                result.append(user_dict)
+
+            return result
 
     async def update_user_password(self, user_id: int, new_password: str) -> bool:
         """Обновление пароля пользователя"""
