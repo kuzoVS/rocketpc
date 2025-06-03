@@ -1,0 +1,82 @@
+version: '3.8'
+
+services:
+  # Основное приложение ROCKET PC
+  app:
+    build: .
+    container_name: rocket-pc-app
+    ports:
+      - "8000:8000"
+    environment:
+      # Переменные окружения из .env файла
+      - DATABASE_URL=${DATABASE_URL}
+      - APP_TITLE=${APP_TITLE}
+      - APP_DESCRIPTION=${APP_DESCRIPTION}
+      - APP_VERSION=${APP_VERSION}
+      - HOST=${HOST}
+      - PORT=${PORT}
+      - DEBUG=${DEBUG}
+      - SECRET_KEY=${SECRET_KEY}
+      - ALGORITHM=${ALGORITHM}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES}
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASSWORD=${SMTP_PASSWORD}
+      - FROM_EMAIL=${FROM_EMAIL}
+      - UPLOAD_FOLDER=${UPLOAD_FOLDER}
+      - MAX_UPLOAD_SIZE=${MAX_UPLOAD_SIZE}
+      - TIMEZONE=${TIMEZONE}
+    volumes:
+      # Монтируем папки для статических файлов и загрузок
+      - ./static:/app/static
+      - ./templates:/app/templates
+      - uploads_data:/app/static/uploads
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    depends_on:
+      - redis
+
+  # Redis для кэширования (опционально)
+  redis:
+    image: redis:7-alpine
+    container_name: rocket-pc-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+
+  # Nginx для обратного прокси (опционально для продакшена)
+  nginx:
+    image: nginx:alpine
+    container_name: rocket-pc-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./static:/var/www/static:ro
+      - ssl_certs:/etc/nginx/ssl:ro
+    depends_on:
+      - app
+    restart: unless-stopped
+
+volumes:
+  uploads_data:
+    driver: local
+  redis_data:
+    driver: local
+  ssl_certs:
+    driver: local
+
+networks:
+  default:
+    name: rocket-pc-network
