@@ -41,7 +41,6 @@ env/
 Thumbs.db
 
 # Environment variables
-.env
 .env.local
 .env.*.local
 
