@@ -36,15 +36,15 @@ services:
       retries: 3
       start_period: 40s
 
-    db_backup:
+  db_backup:
     image: postgres:14
     container_name: supabase-backup
     entrypoint: ["/bin/bash", "-c"]
     command: >
-      "while true; do
-         PGPASSWORD=${PGPASSWORD} pg_dump -h ${PGHOST} -U ${PGUSER} -d ${PGDATABASE} -F c -f /backups/supabase_$(date +%F_%T).dump;
-         sleep 86400;
-       done"
+      while true; do
+        PGPASSWORD=${PGPASSWORD} pg_dump -h ${PGHOST} -U ${PGUSER} -d ${PGDATABASE} -F c -f /backups/supabase_$(date +%F_%T).dump;
+        sleep 86400;
+      done
     environment:
       PGHOST: aws-0-eu-west-2.pooler.supabase.com
       PGUSER: postgres.ymombwsrvuzuaalctmfm
