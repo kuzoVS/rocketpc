@@ -38,7 +38,7 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
         public_patterns = [
             r'^/static/.*',                    # Статические файлы
             r'^/auth/.*',                      # Авторизация
-            r'^/api/requests/$',               # POST создание заявки (ПУБЛИЧНЫЙ)
+            r'^/api/requests/?$',               # POST создание заявки (ПУБЛИЧНЫЙ)
             r'^/api/requests/[^/]+/status$',   # GET статус заявки (ПУБЛИЧНЫЙ)
         ]
 
