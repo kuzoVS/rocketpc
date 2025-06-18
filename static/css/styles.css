@@ -84,7 +84,6 @@ header.scrolled {
     display: flex;
     align-items: center;
     justify-content: center;
-    /* Fallback если нет изображения */
     color: #000;
     font-size: 24px;
     font-weight: bold;
@@ -95,7 +94,6 @@ header.scrolled {
     content: '🚀';
 }
 
-/* Если логотип загрузился, скрываем ракету */
 .logo-icon.has-logo::before {
     content: '';
 }
@@ -377,7 +375,6 @@ nav a:hover {
     background-size: cover;
     background-position: center;
     border: 3px solid #00ffff;
-    /* Fallback если нет изображения */
     background-color: #333;
     transition: all 0.4s ease;
     position: relative;
@@ -473,11 +470,11 @@ textarea {
     justify-content: center;
     overflow-y: auto;
 }
+
 #deviceType option {
     background-color: #1a1a2e !important;
     color: #ffffff !important;
 }
-
 
 @keyframes fadeIn {
     from { opacity: 0; }
@@ -486,15 +483,17 @@ textarea {
 
 .modal-content {
     background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-    margin: 5% auto;
-    padding: 40px;
-    border-radius: 15px;
-    width: 90%;
-    max-width: 500px;
+    margin: 32px auto;
+    padding: 28px 18px;
+    border-radius: 14px;
+    width: 94vw;
+    max-width: 420px;
+    max-height: 94vh;
     border: 1px solid #00ffff;
     animation: slideInModal 0.4s ease-out;
     position: relative;
-    overflow: hidden;
+    overflow-y: auto;
+    box-sizing: border-box;
 }
 
 .modal-content::before {
@@ -525,6 +524,12 @@ textarea {
     font-size: 28px;
     font-weight: bold;
     cursor: pointer;
+    background: none;
+    border: none;
+    position: absolute;
+    top: 12px;
+    right: 22px;
+    z-index: 2;
 }
 
 .close:hover {
@@ -567,14 +572,8 @@ footer {
 
 /* Responsive */
 @media (max-width: 768px) {
-    .hero h2 {
-        font-size: 2rem;
-    }
-
-    .services h2 {
-        font-size: 2rem;
-    }
-
+    .hero h2,
+    .services h2,
     .team h2 {
         font-size: 2rem;
     }
@@ -641,14 +640,16 @@ footer {
 
     .modal-content {
         margin: 10% auto;
-        padding: 30px 20px;
-        width: 95%;
+        padding: 20px 8px;
+        width: 98vw;
+        max-width: 440px;
+        min-width: unset;
     }
 }
 
 @media (max-width: 480px) {
     .container {
-        padding: 0 15px;
+        padding: 0 10px;
     }
 
     .hero h2 {
@@ -658,30 +659,24 @@ footer {
 
     .hero p {
         font-size: 1rem;
-        padding: 0 15px;
+        padding: 0 10px;
     }
 
-    .services {
-        padding: 60px 0;
-    }
-
-    .team {
-        padding: 60px 0;
-    }
-
+    .services,
+    .team,
     .form-section {
-        padding: 60px 0;
+        padding: 45px 0;
     }
 
     .service-card {
-        padding: 20px 15px;
-        min-height: 160px;
+        padding: 15px 8px;
+        min-height: 120px;
     }
 
     .service-icon {
-        width: 45px;
-        height: 45px;
-        font-size: 18px;
+        width: 38px;
+        height: 38px;
+        font-size: 16px;
     }
 
     .service-card h3 {
@@ -693,24 +688,18 @@ footer {
     }
 
     .btn {
-        padding: 12px 25px;
+        padding: 10px 16px;
         font-size: 0.95rem;
     }
 
     .modal-content {
-        padding: 25px 15px;
-    }
-}
-@media (max-width: 480px) {
-    .modal-content {
-        width: 96vw;         /* почти на всю ширину, но с отступами */
-        max-width: 420px;    /* не растягивается больше этого */
-        margin: 40px auto;   /* сверху/снизу отступ — не прилипает к краям */
-        padding: 20px 8px 20px 8px;
-        border-radius: 12px; /* небольшие скругления */
-        height: auto;        /* автоматическая высота, без max-height */
-        max-height: 90vh;    /* не вылезает за экран */
-        overflow-y: auto;    /* скролл если много текста */
+        width: 97vw;
+        max-width: 420px;
+        margin: 22px auto;
+        padding: 12px 2vw;
+        border-radius: 10px;
+        max-height: 90vh;
+        min-width: unset;
         box-sizing: border-box;
     }
     .modal {
@@ -718,11 +707,9 @@ footer {
         justify-content: center;
     }
     .close {
-        position: absolute;
         top: 10px;
-        right: 16px;
-        font-size: 2rem;
-        z-index: 2;
+        right: 12px;
+        font-size: 1.6rem;
     }
     .form-group label,
     .form-group input,
@@ -733,14 +720,14 @@ footer {
     .form-group input,
     .form-group select,
     .form-group textarea {
-        padding: 12px;
+        padding: 10px;
     }
     #requestModal h2 {
-        font-size: 1.3rem;
-        margin-bottom: 15px;
+        font-size: 1.2rem;
+        margin-bottom: 10px;
     }
     #requestModal button[type="submit"] {
         width: 100%;
-        font-size: 1.1rem;
+        font-size: 1rem;
     }
 }
